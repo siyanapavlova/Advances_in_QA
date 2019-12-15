@@ -46,10 +46,13 @@ class ConfigReader():
 
     CONFIGURATION FILE SYNTAX
     - one parameter per line, containing a name and a value
-    - name and value are separated by at least one white space or tab
-    - names can contain alphanumeric symbols and underscores (no '-', please!)
-    - mutiple space-separated values in one line are processed as a list
-    - multiword expressions are marked with double quotation marks
+        - name and value are separated by at least one white space or tab
+        - names should contain alphanumeric symbols and '_' (no '-', please!)
+    - list-like values are allowed (use Python list syntax)
+        - strings within valuelists don't need to be quoted
+        - value lists either with or without quotation (no ["foo", 3, "bar"] )
+        - mixed lists will exclude non-quoted elements
+    - multi-word expressions are marked with single or double quotation marks
     - lines starting with '#' are ignored
     - no in-line comments!
     - config files should have the extension 'cfg' (to indicate their purpose)
@@ -71,38 +74,35 @@ class ConfigReader():
         with open(self.filepath, "r") as f:
             lines = f.readlines()
 
-        c = 0 #CLEANUP
         for line in lines:
-            print(f"line {c}: {line}") #CLEANUP
-            c += 1 #CLEANUP
-            words = line.rstrip().split()
-            if not words: # ignore empty lines
+            line = line.rstrip()
+            if not line: # ignore empty lines
                 continue
-            elif words[0].startswith("#"): # ignore commented-out lines
+            elif line.startswith('#'): # ignore comment lines
                 continue
-            else:
-                """ parse the line to get parameter name and parameter value """
-                paramname = words.pop(0)
-                if not words: # no value specified
-                    print(f"WARNING: no value specified for parameter {paramname}.")
-                    paramvalue = None
-                elif words[0].startswith("["): # detects a list of values
-                    paramvalue = self.listparse(" ".join(words))
-                elif words[0].startswith('"'): # detects a multi-word string
-                    paramvalue = self.stringparse(words)
-                else:
-                    """ only single values are valid! """
-                    if len(words) > 1:
-                        #TODO make this proper error handling (= throw an error)
-                        print(f"ERROR while parsing {self.filepath} --",
-                              f"too many values in line '{line}'.")
-                        sys.exit()
-                    else:
-                        """ parse the single value """
-                        paramvalue = self.numberparse(words[0]) # 'words' is still a list
-                        paramvalue = self.boolparse(paramvalue)
 
-                cfg[paramname] = paramvalue # adds the parameter to the config
+            words = line.split()
+            paramname = words.pop(0)
+            if not words: # no value specified
+                print(f"WARNING: no value specified for parameter {paramname}.")
+                paramvalue = None
+            elif words[0].startswith("["): # detects a list of values
+                paramvalue = self.listparse(" ".join(words))
+            elif words[0].startswith('"') or words[0].startswith('\''): # detects a multi-word string
+                paramvalue = self.stringparse(words)
+            else:
+                """ only single values are valid! """
+                if len(words) > 1:
+                    #TODO make this proper error handling (= throw an error)
+                    print(f"ERROR while parsing {self.filepath} --",
+                          f"too many values in line '{line}'.")
+                    sys.exit()
+                else:
+                    """ parse the single value """
+                    paramvalue = self.numberparse(words[0]) # 'words' is still a list
+                    paramvalue = self.boolparse(paramvalue)
+
+            cfg[paramname] = paramvalue # adds the parameter to the config
 
         self.config = cfg
         return self.config
@@ -112,42 +112,20 @@ class ConfigReader():
         """
         #TODO docstring
         """
-        tmp_list = []
-        result = []
+        re_quoted = re.compile('["\'](.+?)["\'][,\]]')
+        elements = re.findall(re_quoted, liststring)
+        if elements:
+            return elements
 
-        # pre-processing
-        for w in words:
-            if w.startswith('['): w = w.lstrip('[')
-            if w.endswith(']'):   w = w.rstrip(']')
-            if w.endswith(','):   w = w.rstrip(',')
-            tmp_list.append(w)
-
-        tmp_str = "" # to handle multi-word strings within lists
-        for e in tmp_list:
-            # in case of quoted strings
-            if e.startswith('"') or e.startswith('\''):
-                e = e.lstrip('"').lstrip('\'')
-                # deal with single-word quoted strings
-                if e.endswith('"') or e.endswith('\''):
-                    e = e.rstrip('"').rstrip('\'')
-                    result.append(e)
-                else:
-                    tmp_str += e
-            # in case of multi-word strings
-            elif e.endswith('"') or e.endswith('\''):
-                tmp_str += " "+e.rstrip('"').rstrip('\'')
-                result.append(tmp_str)
-                tmp_str = ""
-            # for string words within multi-word strings
-            elif tmp_str:
-                tmp_str += " "+e
-
-            else:
-                e = cls.numberparse(e) # convert to number if possible
-                e = cls.boolparse(e) # convert to bool if possible
+        re_unquoted = re.compile('[\[\s]*(.+?)[,\]]')
+        elements = re.findall(re_unquoted, liststring)
+        if elements:
+            result = []
+            for e in elements:
+                e = cls.numberparse(e)  # convert to number if possible
+                e = cls.boolparse(e)  # convert to bool if possible
                 result.append(e)
-
-        return result
+            return result
 
     @staticmethod
     def stringparse(words):
