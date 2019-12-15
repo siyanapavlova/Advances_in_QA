@@ -6,8 +6,8 @@ This module provides helper functions.
 
 import sys
 import re
-from tqdm import tqdm
-import time
+#from tqdm import tqdm
+#import time
 
 def loop_input(rtype=str, default=None, msg=""):
     """
