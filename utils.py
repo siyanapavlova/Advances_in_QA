@@ -9,6 +9,7 @@ import re
 #from tqdm import tqdm
 #import time
 
+
 def loop_input(rtype=str, default=None, msg=""):
     """
     Wrapper function for command-line input that specifies an input type
@@ -22,7 +23,7 @@ def loop_input(rtype=str, default=None, msg=""):
     """
     while True:
         try:
-            s = input(msg)
+            s = input(msg+f" (default: {default}): ")
             if rtype == bool and len(s) > 0:
                 if s=="True":
                     return True
