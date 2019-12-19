@@ -13,7 +13,7 @@ import re
 def loop_input(rtype=str, default=None, msg=""):
     """
     Wrapper function for command-line input that specifies an input type
-    and a default value.
+    and a default value. Input types can be string, int, float, or bool.
     :param rtype: type of the input. one of str, int, float, bool
     :type rtype: type
     :param default: value to be returned if the input is empty
@@ -50,7 +50,7 @@ class ConfigReader():
         - name and value are separated by at least one white space or tab
         - names should contain alphanumeric symbols and '_' (no '-', please!)
     - list-like values are allowed (use Python list syntax)
-        - strings within valuelists don't need to be quoted
+        - strings within value lists don't need to be quoted
         - value lists either with or without quotation (no ["foo", 3, "bar"] )
         - mixed lists will exclude non-quoted elements
     - multi-word expressions are marked with single or double quotation marks
@@ -70,7 +70,16 @@ class ConfigReader():
         return "\n".join([str(k)+"\t"+str(v) for k,v in self.params.items()])
 
     def read_config(self):
-        #TODO docstring
+        """
+        Reads the ConfigReader's assigned file (attribute: 'filename') and parses
+        the contents into a dictionary.
+        - ignores empty lines and lines starting with '#'
+        - takes the first continuous string as parameter key (or: parameter name)
+        - parses all subsequent strings (splits at whitespaces) as values
+        - tries to convert each value to float, int, and bool. Else: string.
+        - parses strings that look like Python lists to lists
+        :return: dict[str:obj]
+        """
         cfg = {}
         with open(self.filepath, "r") as f:
             lines = f.readlines()
@@ -111,7 +120,21 @@ class ConfigReader():
     @classmethod
     def listparse(cls, liststring):
         """
-        #TODO docstring
+        Parses a string that looks like a Python list (square brackets, comma
+        separated, ...). A list of strings can make use of quotation marks, but
+        doesn't need to. List-like strings that contain some quoted and some
+        unquoted elements will be parsed to only return the quoted elements.
+        Elements parsed from an unquoted list will be converted to numbers/bools
+        if possible.
+        Examples:
+            [this, is, a, valid, list] --> ['this', 'is', 'a', 'valid', 'list']
+            ["this", "one", "too"]     --> ['this', 'one', 'too']
+            ['single', 'quotes', 'are', 'valid'] --> ['single', 'quotes', 'are', 'valid']
+            ["mixing", 42, is, 'bad']  --> ['mixing', 'bad']
+            ["54", "74", "90", "2014"] --> ['54', '74', '90', '2014']
+            [54, 74, 90, 2014]         --> [54, 74, 90, 2014]
+            [True, 1337, False, 666]   --> [True, 1337, False, 666]
+            [True, 1337, "bla", False, 666] --> ['bla']
         """
         re_quoted = re.compile('["\'](.+?)["\'][,\]]')
         elements = re.findall(re_quoted, liststring)
