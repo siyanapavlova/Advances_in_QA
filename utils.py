@@ -54,6 +54,7 @@ class ConfigReader():
         - value lists either with or without quotation (no ["foo", 3, "bar"] )
         - mixed lists will exclude non-quoted elements
     - multi-word expressions are marked with single or double quotation marks
+    - TODO strings containing quotation marks are not tested yet. Be careful!
     - lines starting with '#' are ignored
     - no in-line comments!
     - config files should have the extension 'cfg' (to indicate their purpose)
