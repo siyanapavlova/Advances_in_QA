@@ -1,4 +1,5 @@
 #!/usr/bin/python3.6
+#author: Simon Preissner
 
 """
 This module provides helper functions.
