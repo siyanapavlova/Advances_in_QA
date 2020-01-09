@@ -223,6 +223,7 @@ class HotPotDataHandler():
 
     def data_for_paragraph_selector(self):
         """
+        #TODO docstring
         Returns a list of tuples (supporting_facts, query, paragraphs), where
         supporting_facts is a list of strings,
         query is a string,

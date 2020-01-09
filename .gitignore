@@ -1,5 +1,5 @@
 
 
-./config/local.cfg
+config/local.cfg
 
-./data/*
+data/
