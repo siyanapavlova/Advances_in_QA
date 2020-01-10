@@ -13,7 +13,7 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 
 
 #### External and Internal Modules
-- `utils.py` (local) provides helper functions.
+- `utils.py` (local) provides helper functions and classes.
 - `tqdm` for progress bars. [(get it here)](https://tqdm.github.io/ "Github")
 
 

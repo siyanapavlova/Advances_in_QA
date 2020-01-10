@@ -209,7 +209,11 @@ class ConfigReader():
         self.params.update({paramname:value})
 
 class HotPotDataHandler():
+    """
+    This class provides an interface to the HotPotQA dataset.
+    It implements functions that tailor the required information to each module.
     #TODO docstring
+    """
 
     def __init__(self, filename="./data/hotpot_train_v1.1.json"):
         self.filename = os.path.abspath(filename)
