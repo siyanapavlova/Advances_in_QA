@@ -7,15 +7,14 @@ from pycorenlp import StanfordCoreNLP
 
 class EntityGraph():
     """
-    #TODO docstring
     Make an entity graph from a context (i.e., a list of paragraphs (i.e., a list
-    of sentences). This uses StanfordCoreNLP to extract named entities and
+    of sentences)). This uses StanfordCoreNLP to extract named entities and
     subsequently connects them via 3 types of relations.
 
     A node in the graph is a 7-tuple:
     0 - int - node ID
-    1 - int - paragraph position
-    2 - int - sentence position
+    1 - int - paragraph number
+    2 - int - sentence number
     3 - int - start index
     4 - int - end index
     5 - list - relations (= tuples of (ID, relation_type))
@@ -29,12 +28,14 @@ class EntityGraph():
 
     def __init__(self, context=None):
         """
-        #TODO docstring
-        :param context:
+        Initialize a graph object with a 'context'.
+        :param context: one or more paragraphs of text
+        :type context: list[list[str]] list of lists of strings
         """
         if context:
             self.context = context
-        else: #CLEANUP
+        else:
+            print("No context for GraphConstructor. Working with toy example.")
             self.context = [
                 ["Mary had a little lamb.",
                  "The lamb was called Tony.",
@@ -52,11 +53,15 @@ class EntityGraph():
 
 
     def populate_graph(self):
+        """
+        Extracts named entities (using StanfordCoreNLP for NER) to the graph
+        data structure.
+        """
+        # TODO change from calling a server to calling a local system
         nlp = StanfordCoreNLP("http://corenlp.run/")
         ent_id = 0
         for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
             for sent_id, sentence in enumerate(paragraph):  # usually multiple sentences
-                #print(sentence)  # CLEANUP
                 annotated = nlp.annotate(sentence,
                                          properties={"annotators": "ner",
                                                      "outputFormat": "json"})
@@ -69,22 +74,24 @@ class EntityGraph():
                                        sent_id,
                                        e['characterOffsetBegin'],
                                        e['characterOffsetEnd'],
-                                       [],
-                                       e['text']
+                                       [], # relations
+                                       e['text'] # name of the node
                                       ))
                     ent_id += 1
 
     def connect_graph(self):
         """
-        #TODO docstring
+        Establish sentence-level, context-level, and paragraph-level links.
+        All 3 relation types are symmetric, but stored in both of any two
+        related nodes.
         """
         """
         As self.graph is a list and IDs are basically counters, the graph nodes
         can be looked at in a "forward-only" fashion so that the algorithm runs
-        in n! steps for n entities (instead of n^2)
+        in sum[i=0..n](i*(i-1)) instead of n^2.
         """
         for e1 in self.graph:
-            for e2 in self.graph[e1[0]+1:]:
+            for e2 in self.graph[e1[0]+1:]: # loop over nodes with higher ID
                 # all relations are symmetric -> they're added to both nodes
                 if e1[2] == e2[2]:
                     # same sentence ID -> sentence-level link
@@ -113,7 +120,7 @@ class EntityGraph():
         :return: set of link triplets (e1, e2, rel_type)
         """
         relations = set()
-        for node in self.graph:
+        for node in self.graph: # get all relations (both directions)
             relations.update(set([ (node[0],r[0],r[1]) for r in node[5] ]))
         result = set()
         for e1,e2,rt in relations:
