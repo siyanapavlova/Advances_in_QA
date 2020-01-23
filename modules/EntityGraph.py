@@ -26,27 +26,35 @@ class EntityGraph():
     2 - paragraph-level links
     """
 
-    def __init__(self, context=None):
+    def __init__(self, context=None, max_nodes=40):
         """
         Initialize a graph object with a 'context'.
         :param context: one or more paragraphs of text
         :type context: list[list[str]] list of lists of strings
+        :type context:
+        #TODO like this: [
+                             ["title phrase", ["first sentence", "second sentence"]],
+                             ["second par. title", ["...", "..."]]
+                         ]
         """
         if context:
             self.context = context
         else:
             print("No context for GraphConstructor. Working with toy example.")
             self.context = [
-                ["Mary had a little lamb.",
-                 "The lamb was called Tony.",
-                 "Some Microsoft executives wanted to hire Tony."],
-                ["Siyana thought that Tony is cute.",
-                 "Well, I also think that he is nice.",
-                 "Mary, however liked Tony even more than we do."]
+                ["Mary and her lamb",
+                    ["Mary had a little lamb.",
+                     "The lamb was called Tony.",
+                     "Some Microsoft executives wanted to hire Tony."]],
+                ["All like it but John",
+                    ["Siyana thought that Tony is cute.",
+                     "Well, I also think that he is nice.",
+                     "Mary, however liked Tony even more than we do."]]
             ]
         self.graph = [] # list characteristics are utilized by connect_graph()
         self.populate_graph()
         self.connect_graph()
+        self.prune_graph(max_nodes)
 
     def __repr__(self):
         return "\n".join([str(t) for t in self.graph])
@@ -60,6 +68,7 @@ class EntityGraph():
         # TODO change from calling a server to calling a local system
         nlp = StanfordCoreNLP("http://corenlp.run/")
         ent_id = 0
+        #TODO change this to fit the new data format
         for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
             for sent_id, sentence in enumerate(paragraph):  # usually multiple sentences
                 annotated = nlp.annotate(sentence,
@@ -101,10 +110,23 @@ class EntityGraph():
                     # same name -> context-level link
                     e1[5].append((e2[0], 1))
                     e2[5].append((e1[0], 1))
-                if e1[2] == 0 and e1[1] == e2[1]:
+                if e1[2] == 0 and e1[1] == e2[1]: #TODO connect with paragraph title, not with first sentence!
                     # e1 in title sent. & same paragraph -> paragraph-level link
                     e1[5].append((e2[0], 2))
                     e2[5].append((e1[0], 2))
+
+    def prune_graph(self, max_nodes):
+        """
+        #TODO docstring
+        :param max_nodes:
+        :return:
+        """
+        if len(self.graph) >= max_nodes:
+            # TODO delete the least connected nodes from the graph so that it contains max_nodes nodes
+            ...
+        else:
+            pass
+
 
     def link_triplets(self):
         """

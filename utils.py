@@ -5,6 +5,7 @@
 This module provides helper functions.
 """
 
+import os
 import sys
 import re
 import json
@@ -71,6 +72,21 @@ class ConfigReader():
         returns tab-separated key-value pairs (one pair per line)
         """
         return "\n".join([str(k)+"\t"+str(v) for k,v in self.params.items()])
+
+    def __call__(self, *paramnames):
+        """
+        Returns a single value or a list of values corresponding to the
+        provided parameter name(s). Returns the whole config in form of a
+        dictionary if no parameter names are specified.
+        """
+        if not paramnames: # return the whole config
+            return self.params
+        else: # return specified values
+            values = [self.params[name] for name in paramnames]
+            if len(values) == 1:
+                return values[0]
+            else:
+                return values
 
     def read_config(self):
         """
@@ -182,28 +198,11 @@ class ConfigReader():
         else:
             return string
 
-    def get_config(self):
-        """
-        returns the config as a dictionary
-        """
-        return self.params
-
-    def get_params(self):
+    def get_param_names(self):
         """
         returns a list of parameter names
         """
         return [key for key in self.params.keys()]
-
-    def get(self, *paramname):
-        """
-        returns a specific value or a tuple of values corresponding to the
-        provided parameter name(s).
-        """
-        values = [self.params[name] for name in paramname]
-        if len(values) == 1:
-            return values[0]
-        else:
-            return tuple(values)
 
     def set(self, paramname, value):
         self.params.update({paramname:value})
