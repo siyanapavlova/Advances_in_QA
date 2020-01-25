@@ -2,8 +2,7 @@
 This class implements the Entity Graph Constructor from the paper, section 3.2
 """
 
-from pycorenlp import StanfordCoreNLP
-
+from pycorenlp import StanfordCoreNLP #CLEANUP when not calling the server anymore
 
 class EntityGraph():
     """
@@ -14,7 +13,7 @@ class EntityGraph():
     A node in the graph is a 7-tuple:
     0 - int - node ID
     1 - int - paragraph number
-    2 - int - sentence number
+    2 - int - sentence number (first sentence = paragraph title)
     3 - int - start index
     4 - int - end index
     5 - list - relations (= tuples of (ID, relation_type))
@@ -52,15 +51,16 @@ class EntityGraph():
                      "Mary, however liked Tony even more than we do."]]
             ]
         self.graph = [] # list characteristics are utilized by connect_graph()
-        self.populate_graph()
-        self.connect_graph()
-        self.prune_graph(max_nodes)
+        self.discarded_nodes = []
+        self.find_nodes()
+        self.connect_nodes()
+        self.prune(max_nodes)
 
     def __repr__(self):
         return "\n".join([str(t) for t in self.graph])
 
 
-    def populate_graph(self):
+    def find_nodes(self):
         """
         Extracts named entities (using StanfordCoreNLP for NER) to the graph
         data structure.
@@ -68,13 +68,21 @@ class EntityGraph():
         # TODO change from calling a server to calling a local system
         nlp = StanfordCoreNLP("http://corenlp.run/")
         ent_id = 0
-        #TODO change this to fit the new data format
         for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
-            for sent_id, sentence in enumerate(paragraph):  # usually multiple sentences
+            sentences = [paragraph[0]]
+            sentences.extend(paragraph[1])
+            #print("\n".join([str(i)+"   "+str(s) for i,s in enumerate(sentences)])) #CLEANUP
+            for sent_id, sentence in enumerate(sentences):  # first sentence is the paragraph title
+                print("NER of", sent_id, "-", sentence) #CLEANUP
                 annotated = nlp.annotate(sentence,
-                                         properties={"annotators": "ner",
-                                                     "outputFormat": "json"})
-                entities = annotated['sentences'][0]['entitymentions']
+                                     properties={"annotators": "ner",
+                                                 "outputFormat": "json"})
+                try:
+                    entities = annotated['sentences'][0]['entitymentions'] # list of dicts
+                except TypeError as e: #CLEANUP
+                    print(e)
+                    print(annotated)
+
                 for e in entities:
                     # TODO change relations container from list to set?
                     # TODO if so, then also change connect_graph()!
@@ -88,45 +96,55 @@ class EntityGraph():
                                       ))
                     ent_id += 1
 
-    def connect_graph(self):
+    def connect_nodes(self):
         """
         Establish sentence-level, context-level, and paragraph-level links.
         All 3 relation types are symmetric, but stored in both of any two
         related nodes.
         """
-        """
-        As self.graph is a list and IDs are basically counters, the graph nodes
-        can be looked at in a "forward-only" fashion so that the algorithm runs
-        in sum[i=0..n](i*(i-1)) instead of n^2.
-        """
-        for e1 in self.graph:
-            for e2 in self.graph[e1[0]+1:]: # loop over nodes with higher ID
-                # all relations are symmetric -> they're added to both nodes
-                if e1[2] == e2[2]:
-                    # same sentence ID -> sentence-level link
-                    e1[5].append((e2[0], 0))
-                    e2[5].append((e1[0], 0))
-                if e1[6] == e2[6]:
-                    # same name -> context-level link
-                    e1[5].append((e2[0], 1))
-                    e2[5].append((e1[0], 1))
-                if e1[2] == 0 and e1[1] == e2[1]: #TODO connect with paragraph title, not with first sentence!
-                    # e1 in title sent. & same paragraph -> paragraph-level link
-                    e1[5].append((e2[0], 2))
-                    e2[5].append((e1[0], 2))
 
-    def prune_graph(self, max_nodes):
+        # all relations are symmetric -> they're always added to both nodes
+        title_entities = [e for e in self.graph if e[2]==0]
+        paragraph_entities = [e for e in self.graph if e not in title_entities]
+
+        for e1 in paragraph_entities: # look at all nodes in paragraphs
+            for e2 in paragraph_entities:
+                if e2[0] > e1[0]: # only match up with subsequent nodes
+                    # same paragraph and sentence IDs -> sentence-level link
+                    if e1[1] == e2[1] and e1[2] == e2[2]:
+                        self.graph[e1[0]][5].append((e2[0], 0))
+                        self.graph[e2[0]][5].append((e1[0], 0))
+                    # same name -> context-level link
+                    if e1[6] == e2[6]:
+                        self.graph[e1[0]][5].append((e2[0], 1))
+                        self.graph[e2[0]][5].append((e1[0], 1))
+
+        for e1 in title_entities: # paragraph-level links
+            for e2 in paragraph_entities:
+                if e1[1] == e2[1]: # same paragraph
+                    self.graph[e1[0]][5].append((e2[0], 2))
+                    self.graph[e2[0]][5].append((e1[0], 2))
+
+    def prune(self, max_nodes):
+        #TODO test this method
         """
         #TODO docstring
         :param max_nodes:
         :return:
         """
-        if len(self.graph) >= max_nodes:
-            # TODO delete the least connected nodes from the graph so that it contains max_nodes nodes
-            ...
+        if len(self.graph) > max_nodes:
+            # temporary representation, sorted by number of connections
+            pruned_graph = sorted(self.graph,
+                                  key=lambda x:len(x[5]),
+                                  reverse=True)[:max_nodes]
+            #TODO why does prune(8) lead to 9 nodes?
+            for node in self.graph: # execute pruning
+                if node not in pruned_graph:
+                    #TODO do we really need discarded_nodes?
+                    self.discarded_nodes.append(node) # keep discarded nodes, just in case
+                    self.graph.remove(node)
         else:
             pass
-
 
     def link_triplets(self):
         """
@@ -151,3 +169,20 @@ class EntityGraph():
             else:
                 pass
         return result
+
+    def avg_degree(self):
+        """
+        number of average connections per node (bidirectional links count only once)
+        :return: average degree of the whole graph
+        """
+        return len(self.link_triplets())/len(self.graph)
+
+
+    def visualize(self):
+        #TODO implement visualization code?
+        # https://www.data-to-viz.com/graph/network.html
+        """
+        node labels: entity name (paragraph, sentence)
+        edges color-coded
+        """
+        pass
