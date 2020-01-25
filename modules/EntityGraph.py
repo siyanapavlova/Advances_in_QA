@@ -50,6 +50,7 @@ class EntityGraph():
                      "Well, I also think that he is nice.",
                      "Mary, however liked Tony even more than we do."]]
             ]
+        #TODO change this to a dict (ID:information)?
         self.graph = [] # list characteristics are utilized by connect_graph()
         self.discarded_nodes = []
         self.find_nodes()
@@ -97,6 +98,7 @@ class EntityGraph():
                     ent_id += 1
 
     def connect_nodes(self):
+        #TODO docstring
         """
         Establish sentence-level, context-level, and paragraph-level links.
         All 3 relation types are symmetric, but stored in both of any two
@@ -184,5 +186,23 @@ class EntityGraph():
         """
         node labels: entity name (paragraph, sentence)
         edges color-coded
+
+
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import matplotlib
+        import pandas as pd
+        import networkx as nx
+        from modules.EntityGraph import EntityGraph
+
+        color_codes = {0: "blue", 1: "green", 2: "red"}
+        g = EntityGraph()
+        connections = [str(c[0]) + " " +
+                       str(c[1]) + " " +
+                       "{'color':'" + color_codes[c[2]] + "'}" for c in
+                            g.link_triplets()]
+        G = nx.parse_edgelist(connections, nodetype=int)
+        nx.draw(G)
+        plt.show()
         """
         pass
