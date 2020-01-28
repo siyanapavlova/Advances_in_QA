@@ -10,14 +10,16 @@ class EntityGraph():
     of sentences)). This uses StanfordCoreNLP to extract named entities and
     subsequently connects them via 3 types of relations.
 
-    A node in the graph is a 7-tuple:
+    The paragraph is implemented as a dictionary of node IDs to nodes.
+    Node IDs are given in a counting manner: earlier entities have smaller IDs.
+    A node in the graph is a 6-tuple:
     0 - int - node ID
-    1 - int - paragraph number
-    2 - int - sentence number (first sentence = paragraph title)
-    3 - int - start index
-    4 - int - end index
-    5 - list - relations (= tuples of (ID, relation_type))
-    6 - str - entity (substring of the context defined by 1 through 4)
+    0 - int - paragraph number
+    1 - int - sentence number (first sentence = paragraph title)
+    2 - int - start index
+    3 - int - end index
+    4 - list - relations (= tuples of (ID, relation_type))
+    5 - str - entity (substring of the context defined by 1 through 4)
 
     Relation types are encoded as integers 0, 1, and 2:
     0 - sentence-level links
@@ -28,13 +30,12 @@ class EntityGraph():
     def __init__(self, context=None, max_nodes=40):
         """
         Initialize a graph object with a 'context'.
+        A context is a list of paragraphs.
+        Each paragraph is a 2-element lists where the first element is the
+        paragraph's title and the second element is a list of the paragraph's
+        sentences.
         :param context: one or more paragraphs of text
-        :type context: list[list[str]] list of lists of strings
-        :type context:
-        #TODO like this: [
-                             ["title phrase", ["first sentence", "second sentence"]],
-                             ["second par. title", ["...", "..."]]
-                         ]
+        :type context: list[ list[ str, list[str] ] ]
         """
         if context:
             self.context = context
@@ -50,16 +51,29 @@ class EntityGraph():
                      "Well, I also think that he is nice.",
                      "Mary, however liked Tony even more than we do."]]
             ]
-        #TODO change this to a dict (ID:information)?
-        self.graph = [] # list characteristics are utilized by connect_graph()
-        self.discarded_nodes = []
+        self.graph = {}
+        self.discarded_nodes = {}
         self.find_nodes()
         self.connect_nodes()
         self.prune(max_nodes)
 
     def __repr__(self):
-        return "\n".join([str(t) for t in self.graph])
+        return "\n".join([str(k)+"   "+str(v) for k,v in self.graph.items()])
 
+    def __call__(self, *IDs):
+        """
+        Return the subgraph of nodes corresponding to the given IDs,
+        or "INVALID_ID" if an ID is invalid.
+        :param IDs: IDs of nodes of the graph (int)
+        :return: dictionary of IDs to graph nodes
+        """
+        result = {}
+        for i in IDs:
+            if i in self.graph:
+                result[i] = self.graph[i]
+            else:
+                result[i] = "INVALID_ID"
+        return result
 
     def find_nodes(self):
         """
@@ -85,70 +99,73 @@ class EntityGraph():
                     print(annotated)
 
                 for e in entities:
-                    # TODO change relations container from list to set?
-                    # TODO if so, then also change connect_graph()!
-                    self.graph.append((ent_id,
-                                       para_id,
-                                       sent_id,
-                                       e['characterOffsetBegin'],
-                                       e['characterOffsetEnd'],
-                                       [], # relations
-                                       e['text'] # name of the node
-                                      ))
                     ent_id += 1
+                    self.graph[ent_id] = (para_id,
+                                          sent_id,
+                                          e['characterOffsetBegin'],
+                                          e['characterOffsetEnd'],
+                                          [], # relations
+                                          e['text'] # name of the node
+                                         )
 
     def connect_nodes(self):
-        #TODO docstring
         """
         Establish sentence-level, context-level, and paragraph-level links.
         All 3 relation types are symmetric, but stored in both of any two
-        related nodes.
+        related nodes. A node containing the tuple (i,k) has a relation of
+        type k to the node with ID i.
+        Relation types are marked by integer values 0, 1, and 2:
+        0 = Sentence-level links
+        1 = context-level links
+        2 = paragraph-level links
         """
 
         # all relations are symmetric -> they're always added to both nodes
-        title_entities = [e for e in self.graph if e[2]==0]
-        paragraph_entities = [e for e in self.graph if e not in title_entities]
+        title_entities = {}
+        paragraph_entities = {}
+        for k,e in self.graph.items():
+            if e[1] == 0:
+                title_entities[k] = e
+            else:
+                paragraph_entities[k] = e
 
-        for e1 in paragraph_entities: # look at all nodes in paragraphs
-            for e2 in paragraph_entities:
-                if e2[0] > e1[0]: # only match up with subsequent nodes
+        for k1,e1 in paragraph_entities.items(): # look at all nodes in paragraphs
+            for k2,e2 in paragraph_entities.items():
+                if k2 > k1: # only match up with subsequent nodes
                     # same paragraph and sentence IDs -> sentence-level link
-                    if e1[1] == e2[1] and e1[2] == e2[2]:
-                        self.graph[e1[0]][5].append((e2[0], 0))
-                        self.graph[e2[0]][5].append((e1[0], 0))
+                    if e1[0] == e2[0] and e1[1] == e2[1]:
+                        self.graph[k1][4].append((k2, 0))
+                        self.graph[k2][4].append((k1, 0))
                     # same name -> context-level link
-                    if e1[6] == e2[6]:
-                        self.graph[e1[0]][5].append((e2[0], 1))
-                        self.graph[e2[0]][5].append((e1[0], 1))
+                    if e1[5] == e2[5]:
+                        self.graph[k1][4].append((k2, 1))
+                        self.graph[k2][4].append((k1, 1))
 
-        for e1 in title_entities: # paragraph-level links
-            for e2 in paragraph_entities:
-                if e1[1] == e2[1]: # same paragraph
-                    self.graph[e1[0]][5].append((e2[0], 2))
-                    self.graph[e2[0]][5].append((e1[0], 2))
+        for k1,e1 in title_entities.items(): # paragraph-level links
+            for k2,e2 in paragraph_entities.items():
+                if e1[0] == e2[0]: # same paragraph
+                    self.graph[k1][4].append((k2, 2))
+                    self.graph[k2][4].append((k1, 2))
 
     def prune(self, max_nodes):
-        #TODO test this method
         """
-        #TODO docstring
-        :param max_nodes:
-        :return:
+        Limit the number of nodes in a graph by deleting the least connected
+        nodes ( = smallest number of link tuples). If two nodes have the same
+        number of connections, the one with the higher ID gets deleted.
+        Pruned nodes are stored in a separate data structure (just in case)
+        :param max_nodes: maximum number of nodes
         """
         if len(self.graph) > max_nodes:
             # temporary representation, sorted by number of connections
-            pruned_graph = sorted(self.graph,
-                                  key=lambda x:len(x[5]),
-                                  reverse=True)[:max_nodes]
-            #TODO why does prune(8) lead to 9 nodes?
-            for node in self.graph: # execute pruning
-                if node not in pruned_graph:
-                    #TODO do we really need discarded_nodes?
-                    self.discarded_nodes.append(node) # keep discarded nodes, just in case
-                    self.graph.remove(node)
-        else:
-            pass
+            deletable_keys = sorted(self.graph,
+                                    key=lambda x: len(self.graph[x][4]),
+                                    reverse=True
+                                    )[max_nodes:] # from max_nodes to the end
+            for node in deletable_keys:
+                self.discarded_nodes[node] = self.graph[node]
+                del self.graph[node]
 
-    def link_triplets(self):
+    def relation_triplets(self):
         """
         Computes the set of relation triplets (e1, e2, rel_type) of a graph,
         where e1 and e2 are two related entities and rel_type is their relation.
@@ -162,8 +179,9 @@ class EntityGraph():
         :return: set of link triplets (e1, e2, rel_type)
         """
         relations = set()
-        for node in self.graph: # get all relations (both directions)
-            relations.update(set([ (node[0],r[0],r[1]) for r in node[5] ]))
+        for id,node in self.graph.items(): # get all relations (both directions)
+            relations.update(set([ (id,r[0],r[1]) for r in node[4] ]))
+
         result = set()
         for e1,e2,rt in relations:
             if (e2,e1,rt) not in result: # only keep one of the two triplets
@@ -179,8 +197,7 @@ class EntityGraph():
         """
         return len(self.link_triplets())/len(self.graph)
 
-
-    def visualize(self):
+    def visualize(self, This_method_doesnt_work): #CLEANUP?
         #TODO implement visualization code?
         # https://www.data-to-viz.com/graph/network.html
         """
