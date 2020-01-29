@@ -3,6 +3,7 @@ This class implements the Entity Graph Constructor from the paper, section 3.2
 """
 
 from pycorenlp import StanfordCoreNLP #CLEANUP when not calling the server anymore
+from transformers import BertTokenizer
 
 class EntityGraph():
     """
@@ -43,13 +44,13 @@ class EntityGraph():
             print("No context for GraphConstructor. Working with toy example.")
             self.context = [
                 ["Mary and her lamb",
-                    ["Mary had a little lamb.",
-                     "The lamb was called Tony.",
-                     "Some Microsoft executives wanted to hire Tony."]],
+                 ["Mary had a little lamb.",
+                  "The lamb was called Tony.",
+                  "Some Microsoft executives wanted to hire Tony."]],
                 ["All like it but John",
-                    ["Siyana thought that Tony is cute.",
-                     "Well, I also think that he is nice.",
-                     "Mary, however liked Tony even more than we do."]]
+                 ["Siyana thought that Tony is cute.",
+                  "Well, I also think that he is nice.",
+                  "Mary, however liked Tony even more than we do."]]
             ]
         self.graph = {}
         self.discarded_nodes = {}
@@ -90,8 +91,8 @@ class EntityGraph():
             for sent_id, sentence in enumerate(sentences):  # first sentence is the paragraph title
                 print("NER of", sent_id, "-", sentence) #CLEANUP
                 annotated = nlp.annotate(sentence,
-                                     properties={"annotators": "ner",
-                                                 "outputFormat": "json"})
+                                         properties={"annotators": "ner",
+                                                     "outputFormat": "json"})
                 try:
                     entities = annotated['sentences'][0]['entitymentions'] # list of dicts
                 except TypeError as e: #CLEANUP
@@ -99,14 +100,71 @@ class EntityGraph():
                     print(annotated)
 
                 for e in entities:
-                    ent_id += 1
                     self.graph[ent_id] = (para_id,
                                           sent_id,
                                           e['characterOffsetBegin'],
                                           e['characterOffsetEnd'],
                                           [], # relations
                                           e['text'] # name of the node
-                                         )
+                                          )
+                    ent_id += 1
+
+    def tok2ent(self):
+        #TODO
+        """
+
+        :return:
+        """
+        """
+        How to convert sentence-wide character spans into context-wide spans?
+        - go through graph, ID-wise (make sure the it's sorted by IDs, add 
+          previous sentences' combined length (PLUS SPACE)
+        - add the previous'sentence's length to the combined length if the current
+            sentence number is different from the one before.
+        
+        How to map character spans onto token positions?
+        - use BERT Tokenizer to get a list of tokens 
+        - get rid of hash tags, insert spaces, ...
+        - go through the one-sentence context by moving in steps of token length
+          (use the tokens from BERT Tokenizer)
+        - if we arrive at an index close to a 
+               - entity start position, we regex-search for the first mention
+                    in the remaining context, we consume the next BERT token and
+                    map its list index to the entity (and its span)
+                    (still doing token consumption and position change)
+               - entity end position, we include that token's list index into
+                    the mapping-thingy and set the position to/after entity's 
+                    span end. 
+        - this gives a dic{entity_ID:[tokenIndices]}
+        
+        
+        """
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        one_string_context = self.flatten_context()
+        tokens = tokenizer.tokenize(one_string_context)
+
+        pass
+
+    def flatten_context(self, s=False):
+        """
+        return the context as a single string,
+        :return: string containing the whole context
+        """
+
+        if s: # This is for you, Siyana!
+            return " ".join([p[0]+" "+" ".join([" ".join(s) for s in p[1:]]) for p in self.context])
+
+        final = ""
+        for para in self.context:
+            for sent in para:
+                if type(sent) == list:
+                    final += " ".join(sent) + " "
+                else:
+                    final += sent + " "
+        final = final.rstrip()
+        return final
+
 
     def connect_nodes(self):
         """
