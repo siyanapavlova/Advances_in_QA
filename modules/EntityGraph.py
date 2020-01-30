@@ -200,13 +200,13 @@ class EntityGraph():
                     span end. 
         - this gives a dic{entity_ID:[tokenIndices]}
         """
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         one_string_context = self.flatten_context()
         tokens = tokenizer.tokenize(one_string_context)
 
+        #return abs_positions #CLEANUP?
         pass
-        """
-        return abs_positions #CLEANUP?
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
