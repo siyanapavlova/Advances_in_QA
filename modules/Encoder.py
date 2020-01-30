@@ -35,6 +35,7 @@ class Encoder():
 					 "Mary, however liked Tony even more than we do."]]
 			]
 
+		#TODO does this really flatten into a single string?
 		self.concatenated = query + ' '.join([' '.join(para[1]) for para in context])
 
 	def encode(self,

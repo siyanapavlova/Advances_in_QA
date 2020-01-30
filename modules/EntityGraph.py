@@ -109,63 +109,6 @@ class EntityGraph():
                                           )
                     ent_id += 1
 
-    def tok2ent(self):
-        #TODO
-        """
-
-        :return:
-        """
-        """
-        How to convert sentence-wide character spans into context-wide spans?
-        - go through graph, ID-wise (make sure the it's sorted by IDs, add 
-          previous sentences' combined length (PLUS SPACE)
-        - add the previous'sentence's length to the combined length if the current
-            sentence number is different from the one before.
-        
-        How to map character spans onto token positions?
-        - use BERT Tokenizer to get a list of tokens 
-        - get rid of hash tags, insert spaces, ...
-        - go through the one-sentence context by moving in steps of token length
-          (use the tokens from BERT Tokenizer)
-        - if we arrive at an index close to a 
-               - entity start position, we regex-search for the first mention
-                    in the remaining context, we consume the next BERT token and
-                    map its list index to the entity (and its span)
-                    (still doing token consumption and position change)
-               - entity end position, we include that token's list index into
-                    the mapping-thingy and set the position to/after entity's 
-                    span end. 
-        - this gives a dic{entity_ID:[tokenIndices]}
-        
-        
-        """
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        one_string_context = self.flatten_context()
-        tokens = tokenizer.tokenize(one_string_context)
-
-        pass
-
-    def flatten_context(self, s=False):
-        """
-        return the context as a single string,
-        :return: string containing the whole context
-        """
-
-        if s: # This is for you, Siyana!
-            return " ".join([p[0]+" "+" ".join([" ".join(s) for s in p[1:]]) for p in self.context])
-
-        final = ""
-        for para in self.context:
-            for sent in para:
-                if type(sent) == list:
-                    final += " ".join(sent) + " "
-                else:
-                    final += sent + " "
-        final = final.rstrip()
-        return final
-
-
     def connect_nodes(self):
         """
         Establish sentence-level, context-level, and paragraph-level links.
@@ -204,6 +147,85 @@ class EntityGraph():
                 if e1[0] == e2[0]: # same paragraph
                     self.graph[k1][4].append((k2, 2))
                     self.graph[k2][4].append((k1, 2))
+
+    def tok2ent(self):
+        # TODO docstring
+        """
+
+        :return:
+        """
+
+        """
+        [DONE]
+        How to convert sentence-wide character spans into context-wide spans?
+        - go through graph, ID-wise (make sure the it's sorted by IDs), add 
+          previous sentences' combined length (PLUS SPACE)
+        - add the previous' sentence's length to the combined length if the current
+            sentence number is different from the one before.
+        """
+        #TODO maybe change the data structure of abs_positions?
+        abs_positions = []  # list of tuples: (abs_start, abs_end, node_ID)
+        list_context = [ [p[0]]+p[1]  for p in self.context] # squeeze header into the paragraph
+        node_IDs = sorted(self.graph.keys())  # make sure that the IDs are sorted
+        cum_pos = 0 # cumulative position counter (gets increased with each new sentence)
+        prev_sentnum = 0
+        #one_string_context = self.flatten_context() #CLEANUP
+        for id in node_IDs: # iterate from beginning to end
+            para, sent, start, end, links, name = self.graph[id]
+            if sent != prev_sentnum: # we have a new sentence!
+                # increase accumulated position by sent length and a space
+                cum_pos += len(list_context[para][prev_sentnum])+1
+
+            abs_start = self.graph[id][2] + cum_pos
+            abs_end = self.graph[id][3] + cum_pos
+            abs_positions.append( (abs_start, abs_end, id) )
+            #print(f"{self.graph[id][-1]}: {abs_start} - {abs_end}") #CLEANUP
+            #print(f"\tand in the context: {one_string_context[abs_start:abs_end]}") #CLEANUP
+
+            prev_sentnum = sent
+
+        """
+        How to map character spans onto token positions?
+        - use BERT Tokenizer to get a list of tokens 
+        - get rid of hash tags, insert spaces, ...
+        - go through the one-sentence context by moving in steps of token length
+          (use the tokens from BERT Tokenizer)
+        - if we arrive at an index close to a 
+               - entity start position, we regex-search for the first mention
+                    in the remaining context, we consume the next BERT token and
+                    map its list index to the entity (and its span)
+                    (still doing token consumption and position change)
+               - entity end position, we include that token's list index into
+                    the mapping-thingy and set the position to/after entity's 
+                    span end. 
+        - this gives a dic{entity_ID:[tokenIndices]}
+        """
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        one_string_context = self.flatten_context()
+        tokens = tokenizer.tokenize(one_string_context)
+
+        pass
+        """
+        return abs_positions #CLEANUP?
+
+    def flatten_context(self, siyana_wants_a_oneliner=False):
+        """
+        return the context as a single string,
+        :return: string containing the whole context
+        """
+
+        if siyana_wants_a_oneliner:  # This is for you, Siyana!
+            return " ".join([p[0] + " " + " ".join([" ".join(s) for s in p[1:]]) for p in self.context])
+
+        final = ""
+        for para in self.context:
+            for sent in para:
+                if type(sent) == list:
+                    final += " ".join(sent) + " "
+                else:
+                    final += sent + " "
+        final = final.rstrip()
+        return final
 
     def prune(self, max_nodes):
         """

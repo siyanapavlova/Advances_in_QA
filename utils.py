@@ -41,6 +41,25 @@ def loop_input(rtype=str, default=None, msg=""):
             print("Input needs to be convertable to",rtype,"-- try again.")
             continue
 
+def flatten_context(context, siyana_wants_a_oneliner=False):
+    """
+    return the context as a single string. A context is a list of paragraphs:
+    [[p1_title, [sent1, sent2, sentx]], [p2_title, [sent1, sent2, sentx]]]
+    :return: string containing the whole context
+    """
+
+    if siyana_wants_a_oneliner:  # This is for you, Siyana!
+        return " ".join([p[0] + " " + " ".join([" ".join(s) for s in p[1:]]) for p in context])
+
+    final = ""
+    for para in context:
+        for sent in para:
+            if type(sent) == list:
+                final += " ".join(sent) + " "
+            else:
+                final += sent + " "
+    final = final.rstrip()
+    return final
 
 class ConfigReader():
     """
