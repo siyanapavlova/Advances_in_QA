@@ -4,6 +4,7 @@ This class implements the Entity Graph Constructor from the paper, section 3.2
 
 from pycorenlp import StanfordCoreNLP #CLEANUP when not calling the server anymore
 from transformers import BertTokenizer
+import re
 
 class EntityGraph():
     """
@@ -186,8 +187,8 @@ class EntityGraph():
 
         """
         How to map character spans onto token positions?
-        - use BERT Tokenizer to get a list of tokens 
-        - get rid of hash tags, insert spaces, ...
+        + use BERT Tokenizer to get a list of tokens 
+        + get rid of hash tags, insert spaces, ...
         - go through the one-sentence context by moving in steps of token length
           (use the tokens from BERT Tokenizer)
         - if we arrive at an index close to a 
@@ -201,12 +202,70 @@ class EntityGraph():
         - this gives a dic{entity_ID:[tokenIndices]}
         """
 
+        """ use BERT Tokenizer to get a list of tokens """
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         one_string_context = self.flatten_context()
         tokens = tokenizer.tokenize(one_string_context)
+        remaining_entities = sorted(abs_positions, key=lambda x: x[0])  # make sure that it's sorted by start pos
+        char_tolerance = 0 # numbers of chars that the index is allowed to be off
+        nodeID_to_tokens = {} # contains the mapping from which to construct the matrix
 
-        #return abs_positions #CLEANUP?
-        pass
+        pos = 0 # position in the one-string context
+        current_entity = remaining_entities.pop(0)
+        currently_processing_an_entity = False
+
+        for i,t in enumerate(tokens):
+            #""" We get rid of hash tags and insert spaces """
+            t = t.strip('#')+" " #TODO maybe rather replace '#' with a space?
+            print(f"processing token: >{t}<") #CLEANUP
+
+            if currently_processing_an_entity:
+                #""" if we're in the middle of an entity, we add the token
+                #to the mapping and advance the position """
+                nodeID_to_tokens[current_entity[2]].append(i)
+                pos += len(t) # 'consume' the token
+                print(f"appended >{t}< to mapping under ID {current_entity[2]}") #CLEANUP
+
+            elif pos-char_tolerance < current_entity[0] < pos+char_tolerance: #TODO '< pos+char_tolerance' needed?
+                #""" if we arrive at an index close to an entity start position,
+                #we regex-search for the first mention of the token in the remaining
+                #context and set our position to the start position of that token """
+                print(f"found an entity start close to position {pos}") #CLEANUP
+                pos = pos-char_tolerance + one_string_context[pos-char_tolerance:].find(t)
+                currently_processing_an_entity = True
+                #""" we add the token to the mapping """
+                if current_entity[2] not in nodeID_to_tokens:
+                    nodeID_to_tokens[current_entity[2]] = [i] # make new entity's mapping
+                    print(f"\tadded new entry to mapping, with ID {current_entity[2]}")  # CLEANUP
+                else: # this else-condition is probably not needed (already met by the elif's precondition)
+                    nodeID_to_tokens[current_entity[2]].append(i) # multi word entity
+                    print(f"\textended entry {current_entity[2]} with token {i}({t})")  # CLEANUP
+                #""" we advance the position """
+                pos += len(t)  # 'consume' the token
+
+            else: # neither at the start nor in the middle of an entity --> just consume the token
+                #""" if we're neither within an entity span nor close to a start,
+                # we just advance the position """
+                pos += len(t)
+                print(f"no entity-related event happened")  # CLEANUP
+
+            #""" In any case, if we end up near the end of an entity, we turn off
+            #the "in an entity"-flag and get the next entity """
+            if current_entity[1]-char_tolerance < pos < current_entity[1]+char_tolerance: # end of entity reached #TODO different proximity measure?
+                currently_processing_an_entity = False
+                current_entity = remaining_entities.pop(0) # get the next entity to be processed
+                print(f"reached the end of an entity (position: {pos}).")  # CLEANUP
+                print(f"\t\tnew entity to process: {current_entity} ({self.graph[current_entity[2]][-1]})")  # CLEANUP
+
+        print(f"\nABSOLUTE POSITIONS:")  # CLEANUP
+        for s,e,id in sorted(abs_positions, key=lambda x: x[0]): #CLEANUP
+            print(f"{s}-{e}: {id}({self.graph[id][-1]})")
+
+        print(f"\nRESULTING MAPPING:")  # CLEANUP
+        print([(i,t) for i,t in enumerate(tokens)]) #CLEANUP
+        for id, tokenpos in nodeID_to_tokens.items(): #CLEANUP
+            print(f"{id}: {self.graph[id][-1]} -- {tokenpos}")
+
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
