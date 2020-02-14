@@ -2,15 +2,18 @@
 This class implements the Entity Graph Constructor from the paper, section 3.2
 """
 
+import sys
 from pycorenlp import StanfordCoreNLP #CLEANUP when not calling the server anymore
 from transformers import BertTokenizer
+from flair.data import Sentence
+from flair.models import SequenceTagger
 import numpy as np
 
 class EntityGraph():
     """
     Make an entity graph from a context (i.e., a list of paragraphs (i.e., a list
-    of sentences)). This uses StanfordCoreNLP to extract named entities and
-    subsequently connects them via 3 types of relations.
+    of sentences)). This uses either flair (default) or StanfordCoreNLP for NER
+    and subsequently connects them via 3 types of relations.
 
     The graph is implemented as a dictionary of node IDs to nodes.
     Node IDs are given in a counting manner: earlier entities have smaller IDs.
@@ -29,20 +32,23 @@ class EntityGraph():
     Additionals:
     The graph object is initialized with a BertTokenizer object.
     The object stores the context in structured form ans as token list.
-    The binary matrix for tok2ent is created upon inizialization.
-    A call to the object with one or more IDs will return a subgraph.
-
+    The binary matrix for tok2ent is created upon initialization.
+    A call to the object with one or more IDs will return a sub-graph.
     """
 
-    def __init__(self, context=None, max_nodes=40):
+    def __init__(self, context=None, tagger='flair', max_nodes=40):
         """
         Initialize a graph object with a 'context'.
-        A context is a list of paragraphs.
-        Each paragraph is a 2-element lists where the first element is the
-        paragraph's title and the second element is a list of the paragraph's
-        sentences.
+        A context is a list of paragraphs and each paragraph is a 2-element list
+        where the first element is the paragraph's title and the second element
+        is a list of the paragraph's sentences.
+        Graph nodes are identified by NER; either by flair or by StanfordCoreNLP.
+
         :param context: one or more paragraphs of text
         :type context: list[ list[ str, list[str] ] ]
+        :param tagger: one of 'flair' or 'stanford'
+        :type tagger: str
+        :type max_nodes: int
         """
         if context:
             self.context = context
@@ -65,17 +71,20 @@ class EntityGraph():
         self.graph = {}
         self.discarded_nodes = {}
 
-        self._find_nodes()
+        self._find_nodes(tag_with=tagger)
         self._connect_nodes()
         self.prune(max_nodes) # requires entity links
         self.M = self.tok2ent(add_token_mapping_to_graph=True)
 
     def __repr__(self):
-        result = ""
+        result = f""
         for id, node in self.graph.items():
-            result += str(id)+"\n"
-            for label, values in node.items():
-                result += "   "+str(label)+": "+str(values)+"\n"
+            result += f"{id}\n" + \
+                      f"   mention:      {node['mention']}\n"+ \
+                      f"   address:      {node['address']}\n"+ \
+                      f"   context_span: {node['context_span']}\n" + \
+                      f"   token_ids:    {node['token_ids']}\n" + \
+                      f"   links:        {node['links']}\n"
         return result.rstrip()
 
     def __call__(self, *IDs):
@@ -93,37 +102,69 @@ class EntityGraph():
                 result[i] = {"INVALID_ID":i}
         return result
 
-    def _find_nodes(self):
+    def _find_nodes(self, tag_with='flair'):
         """
-        Extracts named entities (using StanfordCoreNLP for NER) to the graph
-        data structure.
+        Apply NER to extract entities and their positional information from the
+        context.
+        When working with flair, a heuristic is used to counteract cases
+        in which an entity contains trailing punctuation (this would conflict
+        with BertTokenizer later on).
+        :param tag_with: one of 'stanford' or 'flair'
+        :type tag_with: str
         """
-        # TODO change from calling a server to calling a local system
-        nlp = StanfordCoreNLP("http://corenlp.run/")
         ent_id = 0
-        for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
-            sentences = [paragraph[0]]
-            sentences.extend(paragraph[1])
-            for sent_id, sentence in enumerate(sentences):  # first sentence is the paragraph title
-                print("NER of", sent_id, "-", sentence) #CLEANUP
-                annotated = nlp.annotate(sentence,
-                                         properties={"annotators": "ner",
-                                                     "outputFormat": "json"})
-                try:
-                    entities = annotated['sentences'][0]['entitymentions'] # list of dicts
-                except TypeError as e: #CLEANUP
-                    print(e)
-                    print(annotated)
 
-                for e in entities:
-                    self.graph[ent_id] = {"address":(para_id,
-                                                     sent_id,
-                                                     e['characterOffsetBegin'],
-                                                     e['characterOffsetEnd']),
-                                          "links":[], # relations
-                                          "mention":e['text'] # name of the node
-                                         }
-                    ent_id += 1
+        if tag_with == 'stanford':
+            tagger = StanfordCoreNLP("http://corenlp.run/")
+            for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
+                sentences = [paragraph[0]] + paragraph[1] # merge header and sentences to one list
+                for sent_id, sentence in enumerate(sentences):  # first sentence is the paragraph title
+                    print("NER of", sent_id, "-", sentence) #CLEANUP
+                    annotated = tagger.annotate(sentence,
+                                             properties={"annotators": "ner",
+                                                         "outputFormat": "json"})
+                    entities = annotated['sentences'][0]['entitymentions'] # list of dicts
+
+                    for e in entities:
+                        self.graph[ent_id] = {"address":(para_id,
+                                                         sent_id,
+                                                         e['characterOffsetBegin'],
+                                                         e['characterOffsetEnd']),
+                                              "links":[], # relations
+                                              "mention":e['text'] # name of the node
+                                             }
+                        ent_id += 1
+
+        elif tag_with == 'flair':
+            tagger = SequenceTagger.load('ner')
+            for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
+                # merge header and sentences to one list and convert to Sentence object
+                sentences = [Sentence(s) for s in [paragraph[0]] + paragraph[1]]
+                tagged_sentences = tagger.predict(sentences)
+
+                for sent_id, sentence in enumerate(tagged_sentences):  # first sentence is the paragraph title
+                    entities = sentence.get_spans('ner')
+                    for e in entities:
+                        if e.text.endswith(('.','?','!',',',':')): # counter tagging errors
+                            end_pos = e.end_pos - 1
+                            text = e.text[:-1]
+                        else:
+                            end_pos = e.end_pos
+                            text = e.text
+                        self.graph.update(
+                            {ent_id : {"address": (para_id,
+                                                   sent_id,
+                                                   e.start_pos,
+                                                   end_pos),
+                                       "links": [],  # relations
+                                       "mention": text  # name of the node
+                                       }
+                            })
+                        ent_id += 1
+
+        else:
+            print(f"ERROR: invalid tagger {tag_with}. Continuing with 'flair'")
+            self._find_nodes(tag_with='flair')
 
         absolute_spans = self._absolute_entity_spans()
         for id, (start, end) in absolute_spans.items():
@@ -251,8 +292,6 @@ class EntityGraph():
             abs_start = rel_start + cum_pos
             abs_end = rel_end + cum_pos
             abs_spans[id] = (abs_start, abs_end)
-            # print(f"{self.graph[id][-1]}: {abs_start} - {abs_end}") #CLEANUP
-            # print(f"\tand in the context: {one_string_context[abs_start:abs_end]}") #CLEANUP
 
             prev_sentnum = sent
 
@@ -347,7 +386,7 @@ class EntityGraph():
         connections = [str(c[0]) + " " +
                        str(c[1]) + " " +
                        "{'color':'" + color_codes[c[2]] + "'}" for c in
-                            g.link_triplets()]
+                            g.relation_triplets()]
         G = nx.parse_edgelist(connections, nodetype=int)
         nx.draw(G)
         plt.show()
