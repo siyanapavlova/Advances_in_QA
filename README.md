@@ -15,6 +15,9 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 #### External and Internal Modules
 - `utils.py` (local) provides helper functions and classes.
 - `tqdm` for progress bars. [(get it here)](https://tqdm.github.io/ "Github")
+- `flair` for named entity recognition (NER) [(get it here)](https://github.com/flairNLP/flair)
+- `pycorenlp.StanfordCoreNLP` for NER (not necessary)s [(get it here)](https://stanfordnlp.github.io/CoreNLP/other-languages.html)
+- `transformers` by Huggingface, supplying BERT [(get it here)](https://github.com/huggingface/transformers#installation)
 
 
 
