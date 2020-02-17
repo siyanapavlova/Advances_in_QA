@@ -73,6 +73,7 @@ class EntityGraph():
 
         self._find_nodes(tag_with=tagger)
         self._connect_nodes()
+        self._add_entity_spans()
         self.prune(max_nodes) # requires entity links
         self.M = self.tok2ent(add_token_mapping_to_graph=True)
 
@@ -166,10 +167,6 @@ class EntityGraph():
             print(f"ERROR: invalid tagger {tag_with}. Continuing with 'flair'")
             self._find_nodes(tag_with='flair')
 
-        absolute_spans = self._absolute_entity_spans()
-        for id, (start, end) in absolute_spans.items():
-            self.graph[id].update({"context_span": (start, end)})
-
     def _connect_nodes(self):
         """
         Establish sentence-level, context-level, and paragraph-level links.
@@ -208,6 +205,35 @@ class EntityGraph():
                 if e1['address'][0] == e2['address'][0]: # same paragraph
                     self.graph[k1]["links"].append((k2, 2))
                     self.graph[k2]["links"].append((k1, 2))
+
+    def _add_entity_spans(self):
+        """
+        Map each entity onto their character span at the scope of the whole
+        context. This assumes that each sentence/paragraph is separated with
+        one whitespace character.
+        :return: dict{entityID:(start_pos,end_pos)}
+        """
+        abs_spans = {} # {entity_ID:(abs_start,abs_end)}
+        list_context = [[p[0]] + p[1] for p in self.context]  # squeeze header into the paragraph
+        node_IDs = sorted(self.graph.keys())  # make sure that the IDs are sorted
+        cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
+        prev_sentnum = 0
+
+        for id in node_IDs:  # iterate from beginning to end
+            para, sent, rel_start, rel_end = self.graph[id]['address']
+            if sent != prev_sentnum:  # we have a new sentence!
+                # increase accumulated position by sent length plus a space
+                cum_pos += len(list_context[para][prev_sentnum]) + 1
+
+            abs_start = rel_start + cum_pos
+            abs_end = rel_end + cum_pos
+            abs_spans[id] = (abs_start, abs_end)
+
+            prev_sentnum = sent
+
+        # add the information to the graph nodes
+        for id, (start, end) in abs_spans.items():
+            self.graph[id].update({"context_span": (start, end)})
 
     def tok2ent(self, add_token_mapping_to_graph=False):
         """
@@ -269,33 +295,6 @@ class EntityGraph():
                 M[tok][node] = 1
 
         return M
-
-    def _absolute_entity_spans(self):
-        """
-        Map each entity onto their character span at the scope of the whole
-        context. This assumes that each sentence/paragraph is separated with
-        one whitespace character.
-        :return: dict{entityID:(start_pos,end_pos)}
-        """
-        abs_spans = {} # {entity_ID:(abs_start,abs_end)}
-        list_context = [[p[0]] + p[1] for p in self.context]  # squeeze header into the paragraph
-        node_IDs = sorted(self.graph.keys())  # make sure that the IDs are sorted
-        cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
-        prev_sentnum = 0
-
-        for id in node_IDs:  # iterate from beginning to end
-            para, sent, rel_start, rel_end = self.graph[id]['address']
-            if sent != prev_sentnum:  # we have a new sentence!
-                # increase accumulated position by sent length plus a space
-                cum_pos += len(list_context[para][prev_sentnum]) + 1
-
-            abs_start = rel_start + cum_pos
-            abs_end = rel_end + cum_pos
-            abs_spans[id] = (abs_start, abs_end)
-
-            prev_sentnum = sent
-
-        return abs_spans
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
