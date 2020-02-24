@@ -110,11 +110,8 @@ class ConfigReader():
         if not paramnames: # return the whole config
             return self.params
         else: # return specified values
-            values = [self.params[name] for name in paramnames]
-            if len(values) == 1:
-                return values[0]
-            else:
-                return values
+            values = [self.params[n] if n in self.params else None for n in paramnames]
+            return values[0] if len(values) == 1 else values
 
     def read_config(self):
         """
