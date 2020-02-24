@@ -54,6 +54,7 @@ def loop_input(rtype=str, default=None, msg=""):
 def flatten_context(context, siyana_wants_a_oneliner=False):
         """
         return the context as a single string,
+        :param context: list[ list[ str, list[str] ] ]
         :return: string containing the whole context
         """
 
