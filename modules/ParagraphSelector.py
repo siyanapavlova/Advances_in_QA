@@ -13,7 +13,6 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir) 
 from utils import HotPotDataHandler
 
-
 def encode(text,
            tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'),
            model=BertModel.from_pretrained('bert-base-uncased',
@@ -64,15 +63,16 @@ class ParagraphSelector():
     """
     
     def __init__(self,
+                 model_path=None,
                  tokenizer=None,
-                 model=None):
+                 encoder_model=None):
         """
         TODO: write docstring
         """
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') if not tokenizer else tokenizer
-        self.model = BertModel.from_pretrained('bert-base-uncased',
+        self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
                                  output_hidden_states=True,
-                                 output_attentions=True) if not model else model
+                                 output_attentions=True) if not encoder_model else encoder_model
         
         class ParagraphSelectorNet(torch.nn.Module):
             """
@@ -89,13 +89,18 @@ class ParagraphSelector():
                 return output 
             
         self.net = ParagraphSelectorNet()
+        if model_path:
+            try:
+                self.net.load_state_dict(torch.load(model_path))
+            except FileNotFoundError as e:
+                print(e, model_path)
     
     def encode(text):
         ''' TODO: document
         '''
 
         input_ids = torch.tensor([self.tokenizer.encode(text)])
-        all_hidden_states, all_attentions = self.model(input_ids)[-2:]
+        all_hidden_states, all_attentions = self.encoder_model(input_ids)[-2:]
 
         # This is the embedding of the [CLS] token.
         # [-1] is the last hidden state (list of sentences)
@@ -133,11 +138,23 @@ class ParagraphSelector():
 
         return losses
     
-    def test(self, test_data, labels):
+    def evaluate(self, data, threshold=0.1):
         """
         TODO: write docstring
         """
-        pass
+        y_true = []
+        y_pred = []
+        
+        for point in data:
+            context = self.make_context(point, threshold) #point[2] are the paragrphs, point[1] is the query
+            for para in point[2]:
+                y_true.append(para[0] in point[0])
+                y_pred.append(para in context)
+        
+        precision = precision_score(y_true, y_pred)
+        recall = recall_score(y_true, y_pred)
+        
+        return precision, recall
     
     def predict(self, p):
         """ Given the encoding of a paragraph (query + paragraph),
@@ -151,7 +168,7 @@ class ParagraphSelector():
         score = self.net(p)
         return score
     
-    def make_context(self, paragraphs, query, threshold):
+    def make_context(self, datapoint, threshold=0.1):
         """
         TODO: write docstring
         
@@ -167,18 +184,44 @@ class ParagraphSelector():
                            ...]
         """
         context = []
-        for p in paragraphs:
+        for p in datapoint[2]:
             # p[0] is the paragraph title, p[1] is the list of sentences in the paragraph
-            encoded_p = self.encode("[CLS] " + query + " [SEP] " + ("").join(p[1]) + " [SEP]")
+            encoded_p = self.encode("[CLS] " + datapoint[1] + " [SEP] " + ("").join(p[1]) + " [SEP]")
             score = self.predict(encoded_p)
             if score > threshold:
                 context.append(p)
         return context
+    
+    def save(self, savepath):
+        '''
+        TODO: write docstring
+        '''
+        directory_name = "/".join(savepath.split('/')[:-1])
+        print(directory_name)
+        if not os.path.exists(directory_name):
+            os.makedirs(directory_name)
+        torch.save(self.net.state_dict(), savepath)
 
 if __name__ == "__main__":
+    print("Reading data...")
     dh = HotPotDataHandler(parent_dir + "/data/hotpot_train_v1.1.json")
     data = dh.data_for_paragraph_selector()
     
-    training_data = make_training_data(data[:2])
-    X_train, X_test, y_train, y_test = train_test_split(training_data[["id", "text"]], training_data["label"], test_size=0.2, random_state=42, shuffle=True)
+    print("Splitting data...")
+    training_data_raw, test_data_raw = train_test_split(data[:4], test_size=0.25, random_state=42, shuffle=True)
+    training_data = make_training_data(training_data_raw)
+    training_data = shuffle(training_data, random_state=42)
+    
+    print("Initilising ParagraphSelector...")
+    ps = ParagraphSelector()
+    losses = ps.train(training_data["text"], training_data["label"], 1)
+    
+    print("Saving model...")
+    ps.save(parent_dir + '/models/paragraphSelector_all.pt')
+    
+    print("Evaluating...")
+    precision, recall = ps.evaluate(test_data_raw)
+    print('----------------------')
+    print("Precision:", precision)
+    print("Recall:", recall)
     
