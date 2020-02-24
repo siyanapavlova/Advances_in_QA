@@ -51,17 +51,17 @@ def loop_input(rtype=str, default=None, msg=""):
             print("Input needs to be convertable to",rtype,"-- try again.")
             continue
 
-def flatten_context(self, siyana_wants_a_oneliner=False):
+def flatten_context(context, siyana_wants_a_oneliner=False):
         """
         return the context as a single string,
         :return: string containing the whole context
         """
 
         if siyana_wants_a_oneliner:  # This is for you, Siyana!
-            return " ".join([p[0] + " " + " ".join(["".join(s) for s in p[1:]]) for p in self.context])
+            return " ".join([p[0] + " " + " ".join(["".join(s) for s in p[1:]]) for p in context])
 
         final = ""
-        for para in self.context:
+        for para in context:
             for sent in para:
                 if type(sent) == list:
                     final += "".join(sent) + " "
