@@ -57,12 +57,12 @@ class EntityGraph():
             self.context = [
                 ["Mary and her lamb",
                  ["Mary had a little lamb.",
-                  "The lamb was called Tony.",
-                  "One day, Bill Gates wanted to hire Tony."]],
+                  " The lamb was called Tony.",
+                  " One day, Bill Gates wanted to hire Tony."]],
                 ["All like it but John",
                  ["Siyana thought that Tony is cute.",
-                  "Well, I also think that he is nice.",
-                  "Mary, however liked Tony even more than we do."]]
+                  " Well, I also think that he is nice.",
+                  " Mary, however liked Tony even more than we do."]]
             ]
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -303,13 +303,13 @@ class EntityGraph():
         """
 
         if siyana_wants_a_oneliner:  # This is for you, Siyana!
-            return " ".join([p[0] + " " + " ".join([" ".join(s) for s in p[1:]]) for p in self.context])
+            return " ".join([p[0] + " " + " ".join(["".join(s) for s in p[1:]]) for p in self.context])
 
         final = ""
         for para in self.context:
             for sent in para:
                 if type(sent) == list:
-                    final += " ".join(sent) + " "
+                    final += "".join(sent) + " "
                 else:
                     final += sent + " "
         final = final.rstrip()

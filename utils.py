@@ -16,8 +16,9 @@ import json
 def loop_input(rtype=str, default=None, msg=""):
     """
     Wrapper function for command-line input that specifies an input type
-    and a default value. Input types can be string, int, float, or bool.
-    :param rtype: type of the input. one of str, int, float, bool
+    and a default value. Input types can be string, int, float, or bool,
+    or "file", so that only existing files will pass the input.
+    :param rtype: type of the input. one of str, int, float, bool, "file"
     :type rtype: type
     :param default: value to be returned if the input is empty
     :param msg: message that is printed as prompt
@@ -35,31 +36,39 @@ def loop_input(rtype=str, default=None, msg=""):
                 else:
                     print("Input needs to be convertable to",rtype,"-- try again.")
                     continue
+            if rtype == "filepath":
+                s = default if len(s) == 0 else s
+                try:
+                    f = open(s, "r")
+                    f.close()
+                    return s
+                except FileNotFoundError as e:
+                    print("File",s,"not found -- try again.")
+                    continue
             else:
                 return rtype(s) if len(s) > 0 else default
         except ValueError:
             print("Input needs to be convertable to",rtype,"-- try again.")
             continue
 
-def flatten_context(context, siyana_wants_a_oneliner=False):
-    """
-    return the context as a single string. A context is a list of paragraphs:
-    [[p1_title, [sent1, sent2, sentx]], [p2_title, [sent1, sent2, sentx]]]
-    :return: string containing the whole context
-    """
+def flatten_context(self, siyana_wants_a_oneliner=False):
+        """
+        return the context as a single string,
+        :return: string containing the whole context
+        """
 
-    if siyana_wants_a_oneliner:  # This is for you, Siyana!
-        return " ".join([p[0] + " " + " ".join([" ".join(s) for s in p[1:]]) for p in context])
+        if siyana_wants_a_oneliner:  # This is for you, Siyana!
+            return " ".join([p[0] + " " + " ".join(["".join(s) for s in p[1:]]) for p in self.context])
 
-    final = ""
-    for para in context:
-        for sent in para:
-            if type(sent) == list:
-                final += " ".join(sent) + " "
-            else:
-                final += sent + " "
-    final = final.rstrip()
-    return final
+        final = ""
+        for para in self.context:
+            for sent in para:
+                if type(sent) == list:
+                    final += "".join(sent) + " "
+                else:
+                    final += sent + " "
+        final = final.rstrip()
+        return final
 
 class ConfigReader():
     """
