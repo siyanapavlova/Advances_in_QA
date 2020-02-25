@@ -26,6 +26,7 @@ enc = Encoder() #TODO fill out this command once Encoder is done!
 avg_degrees = [] # for analysis purposes
 
 for datapoint in data:
+    query = datapoint[1]
 
     """ Paragraph Selector """
     context = ps.make_context(datapoint, threshold=cfg("ps_threshold"))
@@ -37,7 +38,8 @@ for datapoint in data:
     avg_degrees += graph.avg_degree() # for evaluation purposes
 
     """ Encoder """
-    encoded_context = enc.encode() #TODO call the encoder correctly!
+    # q = query, c = context
+    q_encoded, c_encoded = enc.encode(query, context) #TODO does this call the encoder correctly?
 
     """ Fusion Block """
     M = graph.M
