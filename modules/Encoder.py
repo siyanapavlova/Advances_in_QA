@@ -51,47 +51,41 @@ class Encoder():
 
                 def att_flow_layer(c, q):
                     """
-                    :param c: (batch, c_len, hidden_size * 2)
-                    :param q: (batch, q_len, hidden_size * 2)
-                    :return: (batch, c_len, q_len)
+                    :param c: (batch, c_len, hidden_size)
+                    :param q: (batch, q_len, hidden_size)
+                    :return: (batch, c_len, output_size)
                     """
                     c_len = c.size(1)
                     q_len = q.size(1)
 
                     cq = []
                     for i in range(q_len):
-                        #(batch, 1, hidden_size * 2)
-                        qi = q.select(1, i).unsqueeze(1)
-                        #(batch, c_len, 1)
-                        ci = self.att_weight_cq(c * qi).squeeze(-1)
+                        qi = q.select(1, i).unsqueeze(1) # (batch, 1, hidden_size)
+                        ci = self.att_weight_cq(c * qi).squeeze(-1) # (batch, c_len, 1)
                         cq.append(ci)
-                    # (batch, c_len, q_len)
-                    cq = torch.stack(cq, dim=-1)
+                    cq = torch.stack(cq, dim=-1) # (batch, c_len, q_len)
 
                     # (batch, c_len, q_len)
                     s = self.att_weight_c(c).expand(-1, -1, q_len) + \
                         self.att_weight_q(q).permute(0, 2, 1).expand(-1, c_len, -1) + \
                         cq
 
-                    # (batch, c_len, q_len)
-                    a = F.softmax(s, dim=2)
+                    a = F.softmax(s, dim=2) # (batch, c_len, q_len)
 
-                    # (batch, c_len, q_len) * (batch, q_len, hidden_size * 2) -> (batch, c_len, hidden_size * 2)
+                    # (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
                     c2q_att = torch.bmm(a, q)
 
-                    # (batch, 1, c_len)
-                    b = F.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1)
+                    b = F.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1)  # (batch, 1, c_len)
 
-                    # (batch, 1, c_len) * (batch, c_len, hidden_size * 2) -> (batch, hidden_size * 2)
+                    # (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
                     q2c_att = torch.bmm(b, c).squeeze(1)
 
-                    # (batch, c_len, hidden_size * 2) (tiled)
+                    # (batch, c_len, hidden_size) (tiled)
                     q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
 
-                    # (batch, c_len, hidden_size * 8)
+                    # (batch, c_len, hidden_size * 4)
                     x = torch.cat([c, c2q_att, c * c2q_att, c * q2c_att], dim=-1)
-
-                    x = self.reduction_layer(x)
+                    x = self.reduction_layer(x) # (batch, c_len, output_size)
                     return x
 
                 g = att_flow_layer(c, q)
