@@ -50,13 +50,13 @@ class Encoder():
             print("No context for Encoder. Working with toy example.")
             context = [
                 ["Mary and her lamb",
-                    ["Mary had a little lamb.",
-                     " The lamb was called Tony.",
-                     " Some Microsoft executives wanted to hire Tony."]],
+                 ["Mary had a little lamb.",
+                  " The lamb was called Tony.",
+                  " One day, Bill Gates wanted to hire Tony."]],
                 ["All like it but John",
-                    ["Siyana thought that Tony is cute.",
-                     " Well, I also think that he is nice.",
-                     " Mary, however liked Tony even more than we do."]]
+                 ["Siyana thought that Tony is cute.",
+                  " Well, I also think that he is nice.",
+                  " Mary, however liked Tony even more than we do."]]
             ]
             
         concatenated = query + ' ' + flatten_context(context)
