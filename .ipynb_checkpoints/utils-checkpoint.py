@@ -5,8 +5,10 @@
 This module provides helper functions.
 """
 
+import os
 import sys
 import re
+import json
 #from tqdm import tqdm
 #import time
 
@@ -14,8 +16,9 @@ import re
 def loop_input(rtype=str, default=None, msg=""):
     """
     Wrapper function for command-line input that specifies an input type
-    and a default value. Input types can be string, int, float, or bool.
-    :param rtype: type of the input. one of str, int, float, bool
+    and a default value. Input types can be string, int, float, or bool,
+    or "file", so that only existing files will pass the input.
+    :param rtype: type of the input. one of str, int, float, bool, "file"
     :type rtype: type
     :param default: value to be returned if the input is empty
     :param msg: message that is printed as prompt
@@ -33,12 +36,40 @@ def loop_input(rtype=str, default=None, msg=""):
                 else:
                     print("Input needs to be convertable to",rtype,"-- try again.")
                     continue
+            if rtype == "filepath":
+                s = default if len(s) == 0 else s
+                try:
+                    f = open(s, "r")
+                    f.close()
+                    return s
+                except FileNotFoundError as e:
+                    print("File",s,"not found -- try again.")
+                    continue
             else:
                 return rtype(s) if len(s) > 0 else default
         except ValueError:
             print("Input needs to be convertable to",rtype,"-- try again.")
             continue
 
+def flatten_context(context, siyana_wants_a_oneliner=False):
+        """
+        return the context as a single string,
+        :param context: list[ list[ str, list[str] ] ]
+        :return: string containing the whole context
+        """
+
+        if siyana_wants_a_oneliner:  # This is for you, Siyana!
+            return " ".join([p[0] + " " + " ".join(["".join(s) for s in p[1:]]) for p in context])
+
+        final = ""
+        for para in context:
+            for sent in para:
+                if type(sent) == list:
+                    final += "".join(sent) + " "
+                else:
+                    final += sent + " "
+        final = final.rstrip()
+        return final
 
 class ConfigReader():
     """
@@ -70,6 +101,18 @@ class ConfigReader():
         returns tab-separated key-value pairs (one pair per line)
         """
         return "\n".join([str(k)+"\t"+str(v) for k,v in self.params.items()])
+
+    def __call__(self, *paramnames):
+        """
+        Returns a single value or a list of values corresponding to the
+        provided parameter name(s). Returns the whole config in form of a
+        dictionary if no parameter names are specified.
+        """
+        if not paramnames: # return the whole config
+            return self.params
+        else: # return specified values
+            values = [self.params[n] if n in self.params else None for n in paramnames]
+            return values[0] if len(values) == 1 else values
 
     def read_config(self):
         """
@@ -181,28 +224,67 @@ class ConfigReader():
         else:
             return string
 
-    def get_config(self):
-        """
-        returns the config as a dictionary
-        """
-        return self.params
-
-    def get_params(self):
+    def get_param_names(self):
         """
         returns a list of parameter names
         """
         return [key for key in self.params.keys()]
 
-    def get(self, *paramname):
-        """
-        returns a specific value or a tuple of values corresponding to the
-        provided parameter name(s).
-        """
-        values = [self.params[name] for name in paramname]
-        if len(values) == 1:
-            return values[0]
-        else:
-            return tuple(values)
-
     def set(self, paramname, value):
         self.params.update({paramname:value})
+
+class HotPotDataHandler():
+    """
+    This class provides an interface to the HotPotQA dataset.
+    It implements functions that tailor the required information to each module.
+    #TODO docstring
+    """
+
+    def __init__(self, filename="./data/hotpot_train_v1.1.json"):
+        self.filename = os.path.abspath(filename)
+        with open(self.filename, "r") as f:
+            self.data = json.load(f)
+
+    def __repr__(self):
+        header = str(len(self.data))+" items in data; keys:\n"
+        content = "\n".join([str(k) for k in self.data[0].keys()]).rstrip()
+        return header+content
+
+    def data_for_paragraph_selector(self):
+        """
+        #TODO docstring
+        Returns a list of tuples (supporting_facts, query, paragraphs), where
+        supporting_facts is a list of strings,
+        query is a string,
+        paragraphs is a 10-element list where
+            the first element is a string
+            the second element is a list of sentences (i.e., a list of strings)
+        """
+        result = []
+        for point in self.data:
+            supp_facts = [fact[0] for fact in point["supporting_facts"]]
+            result.append(tuple((supp_facts, point["question"], point["context"])))
+        return result
+
+class Linear(nn.Module):
+    '''
+    Linear class for the BiDAF network.
+    Source: https://github.com/galsang/BiDAF-pytorch/blob/master/utils/nn.py
+    '''
+    def __init__(self, in_features, out_features, dropout=0.0):
+        super(Linear, self).__init__()
+
+        self.linear = nn.Linear(in_features=in_features, out_features=out_features)
+        if dropout > 0:
+            self.dropout = nn.Dropout(p=dropout)
+        self.reset_params()
+
+    def reset_params(self):
+        nn.init.kaiming_normal_(self.linear.weight)
+        nn.init.constant_(self.linear.bias, 0)
+
+    def forward(self, x):
+        if hasattr(self, 'dropout'):
+            x = self.dropout(x)
+        x = self.linear(x)
+        return x
