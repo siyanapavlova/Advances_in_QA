@@ -11,6 +11,7 @@ import re
 import json
 #from tqdm import tqdm
 #import time
+from torch import nn
 
 
 def loop_input(rtype=str, default=None, msg=""):
