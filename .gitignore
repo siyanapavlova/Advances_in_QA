@@ -5,3 +5,7 @@ config/local.cfg
 data/
 
 models/
+
+__pycache__
+
+.ipynb_checkpoints

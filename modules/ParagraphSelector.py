@@ -8,6 +8,7 @@ from transformers import BertTokenizer, BertModel
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 import os,sys,inspect
+from sklearn.metrics import recall_score, precision_score, f1_score
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir) 
@@ -45,9 +46,9 @@ def make_training_data(data,
     labels = []
     datapoints = []
     for point in data:        
-        for para in point[2]:
-            labels.append(int(para[0] in point[0])) # Label 1: if paragraph title is in supporting facts, otherwise 0
-            encoded_point = encode("[CLS] " + point[1] + " [SEP] " + ("").join(para[1]) + " [SEP]", tokenizer, model)
+        for para in point[3]:
+            labels.append(torch.Tensor([int(para[0] in point[1])])) # Label 1: if paragraph title is in supporting facts, otherwise 0
+            encoded_point = encode("[CLS] " + point[2] + " [SEP] " + ("").join(para[1]) + " [SEP]", tokenizer, model)
             datapoints.append(encoded_point)
         
     df = pd.DataFrame({
@@ -55,7 +56,7 @@ def make_training_data(data,
         'label': labels,
         'text': datapoints
     })
-    return df  
+    return df 
 
 class ParagraphSelector():
     """
@@ -95,7 +96,7 @@ class ParagraphSelector():
             except FileNotFoundError as e:
                 print(e, model_path)
     
-    def encode(text):
+    def encode(self, text):
         ''' TODO: document
         '''
 
@@ -142,19 +143,30 @@ class ParagraphSelector():
         """
         TODO: write docstring
         """
-        y_true = []
-        y_pred = []
+        all_true = []
+        all_pred = []
+        ids = []
         
         for point in data:
-            context = self.make_context(point, threshold) #point[2] are the paragrphs, point[1] is the query
-            for para in point[2]:
-                y_true.append(para[0] in point[0])
-                y_pred.append(para in context)
+            context = self.make_context(point, threshold) #point[2] are the paragraphs, point[1] is the query
+            para_true = []
+            para_pred = []
+            for para in point[3]:
+                para_true.append(para[0] in point[1])
+                para_pred.append(para in context)
+            all_true.append(para_true)
+            all_pred.append(para_pred)
+            ids.append(point[0])
         
-        precision = precision_score(y_true, y_pred)
-        recall = recall_score(y_true, y_pred)
+        # Flatten the lists so they can be passed to the precision and recall funtions
+        all_true_flattened = [point for para in all_true for point in para]
+        all_pred_flattened = [point for para in all_pred for point in para]
         
-        return precision, recall
+        precision = precision_score(all_true_flattened, all_pred_flattened)
+        recall = recall_score(all_true_flattened, all_pred_flattened)
+        f1 = f1_score(all_true_flattened, all_pred_flattened)
+        
+        return precision, recall, f1, ids, all_true, all_pred
     
     def predict(self, p):
         """ Given the encoding of a paragraph (query + paragraph),
@@ -184,9 +196,9 @@ class ParagraphSelector():
                            ...]
         """
         context = []
-        for p in datapoint[2]:
+        for p in datapoint[3]:
             # p[0] is the paragraph title, p[1] is the list of sentences in the paragraph
-            encoded_p = self.encode("[CLS] " + datapoint[1] + " [SEP] " + ("").join(p[1]) + " [SEP]")
+            encoded_p = self.encode("[CLS] " + datapoint[2] + " [SEP] " + ("").join(p[1]) + " [SEP]")
             score = self.predict(encoded_p)
             if score > threshold:
                 context.append(p)
@@ -197,7 +209,7 @@ class ParagraphSelector():
         TODO: write docstring
         '''
         directory_name = "/".join(savepath.split('/')[:-1])
-        print(directory_name)
+        print("Save to:", directory_name)
         if not os.path.exists(directory_name):
             os.makedirs(directory_name)
         torch.save(self.net.state_dict(), savepath)
@@ -220,8 +232,25 @@ if __name__ == "__main__":
     ps.save(parent_dir + '/models/paragraphSelector_all.pt')
     
     print("Evaluating...")
-    precision, recall = ps.evaluate(test_data_raw)
+    precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw)
     print('----------------------')
     print("Precision:", precision)
     print("Recall:", recall)
+    print("F score:", f1)
     
+    if not os.path.exists(parent_dir + "/models/performance/"):
+        os.makedirs(parent_dir + "/models/performance/")
+    
+    with open(parent_dir + '/models/performance/outputs.txt', 'w', encoding='utf-8') as f:
+        for i in range(len(ids)):
+            f.write(ids[i] + "\t" + \
+                    ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
+                    ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
+    
+    with open(parent_dir + '/models/performance/results.txt', 'w', encoding='utf-8') as f:
+        f.write("Outputs in: " + parent_dir + '/models/performance/outputs.txt'+ \
+               "\nPrecision: " + str(precision) + \
+               "\nRecall: " + str(recall) + \
+               "\nF score: " + str(f1))
+        
+        
