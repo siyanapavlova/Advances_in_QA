@@ -254,8 +254,8 @@ class HotPotDataHandler():
     def data_for_paragraph_selector(self):
         """
         #TODO docstring
-        Returns a list of tuples (supporting_facts, query, paragraphs), where
-        supporting_facts is a list of strings,
+        Returns a list of tuples (question_id, supporting_facts, query, paragraphs),
+        where supporting_facts is a list of strings,
         query is a string,
         paragraphs is a 10-element list where
             the first element is a string
@@ -264,7 +264,10 @@ class HotPotDataHandler():
         result = []
         for point in self.data:
             supp_facts = [fact[0] for fact in point["supporting_facts"]]
-            result.append(tuple((supp_facts, point["question"], point["context"])))
+            result.append(tuple((point["_id"],
+                                 supp_facts,
+                                 point["question"],
+                                 point["context"])))
         return result
 
 class Linear(nn.Module):
