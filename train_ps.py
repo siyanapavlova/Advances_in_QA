@@ -21,17 +21,12 @@ if __name__ == '__main__':
     config_file = loop_input(rtype=str, default="not specified", #TODO change this to argparse!
                              msg="Configuration file for training")
     model_name = "" #TODO use argparse for this!
-    results_name = "" #TODO use argparse for this!
-
 
     cfg = ConfigReader(config_file)
     verbose = cfg("verbose")
 
     model_abs_path = cfg('model_abs_dir') + model_name
-    if model_name.endswith('.pt'):
-        model_abs_path += '.pt'
-
-    results_abs_path = cfg('results_abs_dir') + results_name
+    model_abs_path += '.pt' if not model_name.endswith('.pt') else model_abs_path
 
 
     #========== DATA PREPARATION
@@ -59,13 +54,3 @@ if __name__ == '__main__':
 
     print(f"Saving model in {model_abs_path}...")
     ps.save(model_abs_path)
-
-
-    #========== EVALUATION
-    print("Evaluating...")
-    precision, recall = ps.evaluate(test_data_raw)
-    print('----------------------')
-    print("Precision:", precision)
-    print("Recall:", recall)
-
-    print(f"Saving evaluation results to {}")
