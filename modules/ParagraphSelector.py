@@ -123,6 +123,10 @@ class ParagraphSelector():
         # Set the network into train mode
         self.net.train()
 
+        # put the net on the GPU if possible
+        if torch.cuda.is_available():
+            self.net = self.net.to(torch.device('cuda'))
+
         print("Training...")
 
         # Iterate over the epochs
