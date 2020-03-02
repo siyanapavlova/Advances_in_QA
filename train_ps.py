@@ -2,34 +2,33 @@
 This script performs training of ParagraphSelector models.
 """
 
-from utils import loop_input
-from utils.ConfigReader import ConfigReader
+from utils import Timer
 from utils import HotPotDataHandler
+from utils import ConfigReader
 
 from modules import ParagraphSelector
-from utils import Timer
 
-import pandas as pd
-import torch
-from transformers import BertTokenizer, BertModel
+import argparse
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
-import os,sys,inspect
+
 
 if __name__ == '__main__':
 
     #=========== PARAMETER INPUT
     take_time = Timer()
-    config_file = loop_input(rtype=str, default="not specified", #TODO change this to argparse!
-                             msg="Configuration file for training")
-    model_name = "" #TODO use argparse for this!
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_file', metavar='config', type=str,
+                        help='configuration file for training')
+    parser.add_argument('model_name', metavar='model', type=str,
+                        help="name of the model's file")
+    args = parser.parse_args()
 
-    cfg = ConfigReader(config_file)
-    verbose = cfg("verbose")
+    cfg = ConfigReader(args.config_file)
 
-    model_abs_path = cfg('model_abs_dir') + model_name
-    model_abs_path += '.pt' if not model_name.endswith('.pt') else model_abs_path
+    model_abs_path = cfg('model_abs_dir') + args.model_name
+    model_abs_path += '.pt' if not args.model_name.endswith('.pt') else model_abs_path
     take_time("parameter input")
 
 
