@@ -18,15 +18,14 @@ class Encoder():
     """
 
     def __init__(self,
+                 text_length=512,
+                 pad_token_id=0,
                  tokenizer=None,
                  encoder_model=None):
         """
         TODO: write docstring
         """
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') if not tokenizer else tokenizer
-        self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
-                                 output_hidden_states=True,
-                                 output_attentions=True) if not encoder_model else encoder_model
         
         class BiDAFNet(torch.nn.Module):
             """
@@ -39,7 +38,11 @@ class Encoder():
             Attention Layer: https://github.com/galsang/BiDAF-pytorch
             """
             def __init__(self, hidden_size=768, output_size=300):
-                super(BiDAF, self).__init__()
+                super(BiDAFNet, self).__init__()
+                
+                self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
+                                 output_hidden_states=True,
+                                 output_attentions=True) if not encoder_model else encoder_model
                 
                 self.att_weight_c = Linear(hidden_size, 1)
                 self.att_weight_q = Linear(hidden_size, 1)
@@ -47,9 +50,9 @@ class Encoder():
 
                 self.reduction_layer = Linear(hidden_size * 4, output_size)
 
-            def forward(self, c, q, batch=1):
+            def forward(self, q_token_ids, c_token_ids, batch=1):
 
-                def att_flow_layer(c, q):
+                def att_flow_layer(q, c):
                     """
                     :param c: (batch, c_len, hidden_size)
                     :param q: (batch, q_len, hidden_size)
@@ -87,9 +90,53 @@ class Encoder():
                     x = torch.cat([c, c2q_att, c * c2q_att, c * q2c_att], dim=-1)
                     x = self.reduction_layer(x) # (batch, c_len, output_size)
                     return x
-
-                g = att_flow_layer(c, q)
+                
+                
+                len_query = len(q_token_ids)
+                len_context = len(c_token_ids)
+                
+                all_token_ids = q_token_ids + c_token_ids
+                
+                
+                # Add padding if there are fewer than text_length tokens,
+                # else trim to text_length
+                if len(all_token_ids) < text_length:
+                    all_token_ids += [pad_token_id for _ in range(text_length - len(all_token_ids))]
+                else:
+                    all_token_ids = all_token_ids[:text_length]                
+                
+                all_hidden_states, all_attentions = self.encoder_model(torch.tensor([all_token_ids]))[-2:]
+                
+                # Next five lines: 
+                # This is the embedding of the context + query
+                # [-1] stands for the last hidden state
+                # [0] is the first sentence
+                # sentence being defined as a sequence of characters, and not a linguistic sentence)
+                q_emb = all_hidden_states[-1][0][:len_query]
+                
+                # If query + context is longer than text_lengh (512 by default),
+                # the contenxt embedding includes everything except from the query
+                if len(all_token_ids) > text_length:
+                    c_emb = all_hidden_states[-1][0][len_query:]
+                # Else (query + context shorter than text_length),
+                # the context embedding will start after the query embedding,
+                # and end after len_query+len_context elements
+                # This will prevent us from taking the padding embeddings as
+                # parts of the context embedding
+                else:
+                    c_emb = all_hidden_states[-1][0][len_query:len_query+len_context]
+                
+                print("Query shape:", q_emb.shape)
+                print("Context shape:", c_emb.shape)
+                print(q_emb)
+                print(c_emb)
+                
+                return #TODO remove this
+            
+                g = att_flow_layer(q_emb, c_emb)
                 return g
+        
+        self.net = BiDAFNet()
 
     def encode(self,
                query=None,
@@ -114,30 +161,22 @@ class Encoder():
                   " Mary, however liked Tony even more than we do."]]
             ]
             
-        concatenated = query + ' ' + flatten_context(context)
         
-        tokenized_query = self.tokenizer.tokenize(query)
-        tokenized_context = self.tokenizer.tokenize(flatten_context(context))
+        # Tokenize and encode the query and the context
+        query_input_ids = self.tokenizer.encode(query, add_special_tokens=False)
+        context_input_ids = self.tokenizer.encode(flatten_context(context), add_special_tokens=False)
         
-        len_query = len(tokenized_query)
+        return query_input_ids, context_input_ids
+    
+    def train(self, q_token_ids, c_token_ids):
+        self.net.forward(q_token_ids, c_token_ids)
         
-        input_ids = torch.tensor([self.tokenizer.encode(concatenated, add_special_tokens=False)])
-        all_hidden_states, all_attentions = self.encoder_model(input_ids)[-2:]
-
-        # This is the embedding of the context + query
-        # [-1] stands for the last hidden state
-        # sentence being defined as a sequence of characters, and not a linguistic sentence)
-        return all_hidden_states[-1][0][:len_query], all_hidden_states[-1][0][len_query:]
 
 if __name__=="__main__":
     e = Encoder()
-    query_emb, context_emb = e.encode()
+    q_ids, c_ids = e.encode()
+    e.train(q_ids, c_ids)
     
-    q_emb_unsqueezed = q_emb.unsqueeze(0)
-    c_emb_unsqueezed = c_emb.unsqueeze(0)
     
-    print("Query shape:", query_emb.shape)
-    print("Context shape:", context_emb.shape)
-    print(query_emb)
-    print(context_emb)
+    
     
