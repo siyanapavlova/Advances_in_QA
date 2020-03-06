@@ -17,6 +17,8 @@ from utils import HotPotDataHandler
 
 
 def make_training_data(data,
+                       text_length=512,
+                       pad_token_id = 0,
                        tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
     """
     #TODO docstring
@@ -36,18 +38,25 @@ def make_training_data(data,
     for point in tqdm(data):
         for para in point[3]:
             # Label is 1: if paragraph title is in supporting facts, otherwise 0
-            labels.append([int(para[0] in point[1])])
+            labels.append([float(para[0] in point[1])])
+            point_string = point[2] + " [SEP] " + ("").join(para[1])
+            
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = tokenizer.encode( point[2] + " [SEP] " + ("").join(para[1]) ) #TODO limit to 512 tokens
+            token_ids = tokenizer.encode( point_string )
+            
+            # Add padding if there are fewer than text_length tokens,
+            # else trim to text_length
+            if len(token_ids) < text_length:
+                token_ids += [pad_token_id for _ in range(text_length - len(token_ids))]
+            else:
+                token_ids = token_ids[:512]
             datapoints.append(token_ids)
+    # Turn labels and datapoints into tensors and put them together        
+    label_tensor = torch.tensor(labels)
+    train = torch.tensor(datapoints) 
+    train_tensor = torch.utils.data.TensorDataset(train, label_tensor)
 
-    result = torch.Tensor(list(zip(datapoints, labels))) #TODO make this work (are tensors really the way to go?)
-    result = result.T
-    print(result.shape)
-    print(type(result))
-    input("shape and type of the data") #CLEANUP
-    print(result)
-    return result
+    return train_tensor
 
 class ParagraphSelector():
     """
@@ -80,19 +89,6 @@ class ParagraphSelector():
                 # [-1] is the last hidden state (list of sentences)
                 # first [0] - first (and only) sentence
                 # second [0] - first ([CLS]) token of the sentence
-                from pprint import pprint
-                pprint(token_ids)
-                print(type(token_ids))
-                input("type of token_ids")
-                token_ids = torch.tensor(list(token_ids))
-                print(type(token_ids[0]))
-                input("token_ids[0]")
-                print(type(self.encoder_model(token_ids)))
-                input("type of the encoder_model output")
-                print(self.encoder_model(token_ids).shape) #CLEANUP
-                input("shape of the encoder_model output")
-                print(self.encoder_model(token_ids)[-2][-1][0][0])
-                input("encoder_model CLS token?")
                 embedding = self.encoder_model(token_ids)[-2][-1][0][0]
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
@@ -105,7 +101,7 @@ class ParagraphSelector():
             except FileNotFoundError as e:
                 print(e, model_path)
 
-    def train(self, train_data, labels, epochs=10, learning_rate=0.0001):
+    def train(self, train_data, epochs=10, batch_size=1, learning_rate=0.0001):
         """
         TODO: write docstring
         """
@@ -121,20 +117,30 @@ class ParagraphSelector():
 
         # Set the network into train mode
         self.net.train()
+        
+        
+        cuda_is_available = torch.cuda.is_available()
+        device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
 
         # put the net on the GPU if possible
-        if torch.cuda.is_available():
-            self.net = self.net.to(torch.device('cuda'))
+        if cuda_is_available:
+            self.net = self.net.to(device)
 
         print("Training...")
+        
+        #TODO: find a way to shuffle reproducibly
+        train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True) 
 
         # Iterate over the epochs
         N = len(train_data)
         for epoch in range(epochs):
             print('Epoch %d/%d' % (epoch + 1, epochs))
-            for i in range(0, N, batch_size):
-                inputs = train_data[i:i+batch_size] # select one batch of data
-                labels = labels[i:i+batch_size] # and the corresponding labels
+            
+            
+            for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
+                batch = [t.to(device) if t is not None else None for t in batch]
+                
+                inputs, labels = batch
 
                 optimizer.zero_grad()
                 outputs = self.net(inputs) # encode and apply linear layer
@@ -229,15 +235,11 @@ if __name__ == "__main__":
 
     print("Splitting data...")
     training_data_raw, test_data_raw = train_test_split(data[:4], test_size=0.25, random_state=42, shuffle=True)
-    training_data = make_training_data(training_data_raw)
-    training_data = shuffle(training_data, random_state=42)
-
-    # TODO we use DataLoader to handle batching; is this the right way?
-    train_data = torch.utils.data.DataLoader(training_data, batch_size=1)
+    train_tensor = make_training_data(training_data_raw)
     
     print("Initilising ParagraphSelector...")
     ps = ParagraphSelector()
-    losses = ps.train(train_data, epochs=1)
+    losses = ps.train(train_tensor, epochs=1)
     
     print("Saving model...")
     ps.save(parent_dir + '/models/paragraphSelector_all.pt')
