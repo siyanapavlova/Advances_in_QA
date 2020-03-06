@@ -263,7 +263,7 @@ class HotPotDataHandler():
         """
         result = []
         for point in self.data:
-            supp_facts = [fact[0] for fact in point["supporting_facts"]]
+            supp_facts = set([fact[0] for fact in point["supporting_facts"]])
             result.append(tuple((point["_id"],
                                  supp_facts,
                                  point["question"],
