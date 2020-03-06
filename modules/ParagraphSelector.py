@@ -90,7 +90,8 @@ class ParagraphSelector():
                 # [:,0,:] - we want for all the sentence (:),
                 # only the first token (0) (this is the [CLS token]), 
                 # all its dimensions (:) (768 with bert-base-uncased)
-                embedding = self.encoder_model(token_ids)[-2][-1][:,0,:]
+                with torch.no_grad():
+                    embedding = self.encoder_model(token_ids)[-2][-1][:,0,:]
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
                 return output 
@@ -136,10 +137,12 @@ class ParagraphSelector():
             
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
-                
                 inputs, labels = batch
+
                 optimizer.zero_grad()
-                outputs = self.net(inputs)
+
+                outputs = self.net(inputs).squeeze(1)
+                loss = criterion(outputs, labels)
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
                 optimizer.step()
@@ -182,6 +185,15 @@ class ParagraphSelector():
         :param p: encoding of the paragraph (along with the query), as described in the paper
         :return: score between 0 and 1 for that paragraph
         """
+
+        # put the net and the paragraph onto the GPU if possible
+        cuda_is_available = torch.cuda.is_available()
+        device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
+        if cuda_is_available:
+            self.net = self.net.to(device)
+            p = p.to(device)
+
+
         self.net.eval()
         score = self.net(p)
         return score
@@ -238,7 +250,9 @@ if __name__ == "__main__":
     
     print("Saving model...")
     ps.save(parent_dir + '/models/paragraphSelector_all.pt')
-    
+
+
+
     print("Evaluating...")
     precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw)
     print('----------------------')
