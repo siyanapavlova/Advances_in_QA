@@ -294,7 +294,7 @@ class Linear(nn.Module):
         return x
 
 class Timer():
-    #TODO docstring
+    # TODO docstring
     def __init__(self):
         self.T0 = time()
         self.t0 = time()
@@ -303,18 +303,19 @@ class Timer():
         self.period_name = ""
 
     def __call__(self, periodname):
-        span = time()-self.t0
-        self.steps += periodname
-        self.times.update({periodname:span})
+        span = time() - self.t0
+        self.t0 = time()
+        self.steps.append(periodname)
+        self.times.update({periodname: span})
         return span
 
     def __repr__(self, *args):
         steps = [s for s in args if s in self.steps] if args else self.steps
-        return "\n".join([str(round(self.times[k], 5))+"   "+k for k in steps])
+        return "\n".join([str(round(self.times[k], 5)) + "   " + k for k in steps])
 
     def total(self):
-        span = time()-self.T0
-        self.steps += "total"
-        self.times.update({"total":span})
+        span = time() - self.T0
+        self.steps.append("total")
+        self.times.update({"total": span})
         return span
 

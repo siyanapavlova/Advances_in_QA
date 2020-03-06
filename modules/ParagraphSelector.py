@@ -12,8 +12,10 @@ from tqdm import tqdm
 from sklearn.metrics import recall_score, precision_score, f1_score
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
-sys.path.insert(0, parent_dir) 
+sys.path.insert(0, parent_dir)
+
 from utils import HotPotDataHandler
+from utils import Timer
 
 
 def make_training_data(data,
@@ -49,7 +51,7 @@ def make_training_data(data,
             if len(token_ids) < text_length:
                 token_ids += [pad_token_id for _ in range(text_length - len(token_ids))]
             else:
-                token_ids = token_ids[:512]
+                token_ids = token_ids[:text_length]
             datapoints.append(token_ids)
     # Turn labels and datapoints into tensors and put them together        
     label_tensor = torch.tensor(labels)
@@ -156,8 +158,10 @@ class ParagraphSelector():
         all_true = []
         all_pred = []
         ids = []
-        
-        for point in data:
+
+        self.net.eval()
+
+        for point in tqdm(data, desc="Datapoints"):
             context = self.make_context(point, threshold) #point[2] are the paragraphs, point[1] is the query
             para_true = []
             para_pred = []
@@ -194,11 +198,11 @@ class ParagraphSelector():
             p = p.to(device)
 
 
-        self.net.eval()
+        #self.net.eval() #CLEANUP?
         score = self.net(p)
         return score
     
-    def make_context(self, datapoint, threshold=0.1):
+    def make_context(self, datapoint, threshold=0.1, pad_token_id=0, text_length=512):
         """
         TODO: write docstring
         
@@ -216,15 +220,24 @@ class ParagraphSelector():
         context = []
 
         for p in datapoint[3]:
-            # p[0] is the paragraph title, p[1] is the list of sentences in the paragraph
-            encoded_p = torch.tensor([self.tokenizer.encode(
-                                      datapoint[2] + " [SEP] " + ("").join(p[1]) ) #TODO limit to 512 tokens
-                                     ])
+            # automatically prefixes [CLS] and appends [SEP]
+            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]))
+
+            # Add padding if there are fewer than text_length tokens,
+            # else trim to text_length
+            if len(token_ids) < text_length:
+                token_ids += [pad_token_id for _ in range(text_length - len(token_ids))]
+            else:
+                token_ids = token_ids[:text_length]
+
+            # do the actual prediction & decision
+            encoded_p = torch.tensor([token_ids])
             score = self.predict(encoded_p)
             if score > threshold:
                 context.append(p)
+
         return context
-    
+
     def save(self, savepath):
         '''
         TODO: write docstring
@@ -236,21 +249,41 @@ class ParagraphSelector():
         torch.save(self.net.state_dict(), savepath)
 
 if __name__ == "__main__":
+    timer = Timer()
+    dataset_size = 1250
+    test_split = 0.20  # 2500 test, 10000 train
+    shuffle_seed = 42
+
+    epochs = 1
+    batch_size = 2
+
+    model_rel_path =  '/models/paragraphSelector_all.pt'
+    losses_rel_path = '/models/performance/PS_losses.txt'
+
+
     print("Reading data...")
     dh = HotPotDataHandler(parent_dir + "/data/hotpot_train_v1.1.json")
     data = dh.data_for_paragraph_selector()
+    timer("data_input")
 
     print("Splitting data...")
-    training_data_raw, test_data_raw = train_test_split(data[:4], test_size=0.25, random_state=42, shuffle=True)
+    training_data_raw, test_data_raw = train_test_split(data[:dataset_size],
+                                                        test_size=test_split,
+                                                        random_state=shuffle_seed,
+                                                        shuffle=True)
     train_tensor = make_training_data(training_data_raw)
-    
+    timer("data_splitting")
+
     print("Initilising ParagraphSelector...")
     ps = ParagraphSelector()
-    losses = ps.train(train_tensor, epochs=1, batch_size=3)
-    
-    print("Saving model...")
-    ps.save(parent_dir + '/models/paragraphSelector_all.pt')
+    losses = ps.train(train_tensor, epochs=epochs, batch_size=batch_size)
+    timer("training")
 
+    print("Saving model and losses...")
+    ps.save(parent_dir + model_rel_path)
+    with open(parent_dir + losses_rel_path, "w") as f:
+        f.write("\n".join([str(l) for l in losses]))
+    timer("saving_model")
 
 
     print("Evaluating...")
@@ -259,20 +292,24 @@ if __name__ == "__main__":
     print("Precision:", precision)
     print("Recall:", recall)
     print("F score:", f1)
-    
+    timer("evaluation")
+
     if not os.path.exists(parent_dir + "/models/performance/"):
         os.makedirs(parent_dir + "/models/performance/")
-    
+
     with open(parent_dir + '/models/performance/outputs.txt', 'w', encoding='utf-8') as f:
         for i in range(len(ids)):
             f.write(ids[i] + "\t" + \
                     ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
                     ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
-    
+
     with open(parent_dir + '/models/performance/results.txt', 'w', encoding='utf-8') as f:
         f.write("Outputs in: " + parent_dir + '/models/performance/outputs.txt'+ \
-               "\nPrecision: " + str(precision) + \
-               "\nRecall: " + str(recall) + \
-               "\nF score: " + str(f1))
-        
-        
+                "\nPrecision: " + str(precision) + \
+                "\nRecall: " + str(recall) + \
+                "\nF score: " + str(f1))
+        timer.total()
+        f.write("\n\nTimes taken:\n" + str(timer))
+        print("\ntimes taken:\n", timer)
+
+
