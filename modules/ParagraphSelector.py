@@ -138,12 +138,11 @@ class ParagraphSelector():
             
             
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
-
-                optimizer.zero_grad()
-
                 batch = [t.to(device) if t is not None else None for t in batch]
+                
                 inputs, labels = batch
 
+                optimizer.zero_grad()
                 outputs = self.net(inputs) # encode and apply linear layer
                 loss = criterion(outputs, labels)
                 loss.backward(retain_graph=True)
