@@ -38,7 +38,7 @@ def make_training_data(data,
     for point in tqdm(data):
         for para in point[3]:
             # Label is 1: if paragraph title is in supporting facts, otherwise 0
-            labels.append([float(para[0] in point[1])])
+            labels.append(float(para[0] in point[1]))
             point_string = point[2] + " [SEP] " + ("").join(para[1])
             
             # automatically prefixes [CLS] and appends [SEP]
@@ -87,9 +87,10 @@ class ParagraphSelector():
 
                 # [-2] is all_hidden_states
                 # [-1] is the last hidden state (list of sentences)
-                # first [0] - first (and only) sentence
-                # second [0] - first ([CLS]) token of the sentence
-                embedding = self.encoder_model(token_ids)[-2][-1][0][0]
+                # [:,0,:] - we want for all the sentence (:),
+                # only the first token (0) (this is the [CLS token]), 
+                # all its dimensions (:) (768 with bert-base-uncased)
+                embedding = self.encoder_model(token_ids)[-2][-1][:,0,:]
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
                 return output 
@@ -111,9 +112,6 @@ class ParagraphSelector():
         optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate)
 
         losses = []
-        inputs = train_data[1] # ["tokens"]
-        labels = train_data[2] # ["label"]
-
 
         # Set the network into train mode
         self.net.train()
@@ -136,15 +134,12 @@ class ParagraphSelector():
         for epoch in range(epochs):
             print('Epoch %d/%d' % (epoch + 1, epochs))
             
-            
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 
                 inputs, labels = batch
-
                 optimizer.zero_grad()
-                outputs = self.net(inputs) # encode and apply linear layer
-                loss = criterion(outputs, labels)
+                outputs = self.net(inputs)
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
                 optimizer.step()
@@ -239,7 +234,7 @@ if __name__ == "__main__":
     
     print("Initilising ParagraphSelector...")
     ps = ParagraphSelector()
-    losses = ps.train(train_tensor, epochs=1)
+    losses = ps.train(train_tensor, epochs=1, batch_size=3)
     
     print("Saving model...")
     ps.save(parent_dir + '/models/paragraphSelector_all.pt')
