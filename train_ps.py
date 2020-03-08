@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     #========== TRAINING
     print("Initilising ParagraphSelector...")
-    ps = ParagraphSelector()
+    ps = ParagraphSelector.ParagraphSelector()
 
     print(f"training for {cfg('epochs')} epochs...")
     losses = ps.train(train_data,
