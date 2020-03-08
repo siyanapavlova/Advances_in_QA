@@ -337,6 +337,7 @@ if __name__ == "__main__":
                     ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
 
     with open(parent_dir + performance_rel_path, 'w', encoding='utf-8') as f:
+        f.write("Configuration in: " + args.config_file + "\n")
         f.write("Outputs in:  " + parent_dir + predictions_rel_path + \
                 "\nPrecision: " + str(precision) + \
                 "\nRecall:    " + str(recall) + \
