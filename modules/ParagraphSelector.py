@@ -9,12 +9,15 @@ from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 import os,sys,inspect
 from tqdm import tqdm
+import argparse
+
 from sklearn.metrics import recall_score, precision_score, f1_score
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 from utils import HotPotDataHandler
+from utils import ConfigReader
 from utils import Timer
 
 
@@ -94,6 +97,7 @@ class ParagraphSelector():
                 # all its dimensions (:) (768 with bert-base-uncased)
                 with torch.no_grad():
                     embedding = self.encoder_model(token_ids)[-2][-1][:,0,:]
+                #embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :] #CLEANUP?
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
                 return output 
@@ -143,7 +147,7 @@ class ParagraphSelector():
 
                 optimizer.zero_grad()
 
-                outputs = self.net(inputs).squeeze(1)
+                outputs = self.net(inputs).squeeze(1) #TODO why squeeze(1)?
                 loss = criterion(outputs, labels)
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
@@ -151,7 +155,7 @@ class ParagraphSelector():
 
         return losses
     
-    def evaluate(self, data, threshold=0.1):
+    def evaluate(self, data, threshold=0.1, pad_token_id=0, text_length=512, try_gpu=True):
         """
         TODO: write docstring
         """
@@ -159,10 +163,18 @@ class ParagraphSelector():
         all_pred = []
         ids = []
 
+        # TODO maybe put the model onto the GPU here instead of in make_context?
         self.net.eval()
+        device = torch.device('cuda') if try_gpu and torch.cuda.is_available() \
+            else torch.device('cpu')
+        self.net = self.net.to(device)
 
         for point in tqdm(data, desc="Datapoints"):
-            context = self.make_context(point, threshold) #point[2] are the paragraphs, point[1] is the query
+            context = self.make_context(point,
+                                        threshold=threshold,
+                                        pad_token_id=pad_token_id,
+                                        text_length=text_length,
+                                        device=device) #point[2] are the paragraphs, point[1] is the query
             para_true = []
             para_pred = []
             for para in point[3]:
@@ -182,7 +194,7 @@ class ParagraphSelector():
         
         return precision, recall, f1, ids, all_true, all_pred
     
-    def predict(self, p):
+    def predict(self, p, device=torch.device('cpu')):
         """
         Given the encoding of a paragraph (query + paragraph),
         return the score that the model predicts for that paragraph
@@ -191,18 +203,20 @@ class ParagraphSelector():
         """
 
         # put the net and the paragraph onto the GPU if possible
-        cuda_is_available = torch.cuda.is_available()
-        device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
-        if cuda_is_available:
-            self.net = self.net.to(device)
-            p = p.to(device)
-
-
+        #cuda_is_available = torch.cuda.is_available()
+        #device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
+        #if cuda_is_available:
+        #    self.net = self.net.to(device)
+        #    p = p.to(device) #CLEANUP?
         #self.net.eval() #CLEANUP?
+
+
+        p = p.to(device)
         score = self.net(p)
         return score
     
-    def make_context(self, datapoint, threshold=0.1, pad_token_id=0, text_length=512):
+    def make_context(self, datapoint, threshold=0.1,
+                     pad_token_id=0, text_length=512, device=torch.device('cpu')):
         """
         TODO: write docstring
         
@@ -232,7 +246,7 @@ class ParagraphSelector():
 
             # do the actual prediction & decision
             encoded_p = torch.tensor([token_ids])
-            score = self.predict(encoded_p)
+            score = self.predict(encoded_p, device=device)
             if score > threshold:
                 context.append(p)
 
@@ -250,19 +264,32 @@ class ParagraphSelector():
 
 if __name__ == "__main__":
     timer = Timer()
-    dataset_size = 1250
-    test_split = 0.20  # 2500 test, 10000 train
-    shuffle_seed = 42
 
-    epochs = 1
-    batch_size = 2
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_file', metavar='config', type=str,
+                        help='configuration file for training')
+    args = parser.parse_args()
 
-    model_rel_path =  '/models/paragraphSelector_all.pt'
-    losses_rel_path = '/models/performance/PS_losses.txt'
+    cfg = ConfigReader(args.config_file)
+
+    dataset_size = cfg("dataset_size")
+    test_split = cfg("test_split")
+    shuffle_seed = cfg("shuffle_seed")
+    text_length = cfg("text_length") # limits paragraph length in order to reduce complexity
+
+    epochs = cfg("epochs")
+    batch_size = cfg("batch_size")
+    learning_rate = cfg("learning_rate")
+
+    training_data_rel_path = cfg("training_data_rel_path")
+    model_rel_path =  cfg("model_rel_path")
+    losses_rel_path = cfg("losses_rel_path")
+    predictions_rel_path = cfg("predictions_rel_path")
+    performance_rel_path = cfg("performance_rel_path")
 
 
     print("Reading data...")
-    dh = HotPotDataHandler(parent_dir + "/data/hotpot_train_v1.1.json")
+    dh = HotPotDataHandler(parent_dir + training_data_rel_path)
     data = dh.data_for_paragraph_selector()
     timer("data_input")
 
@@ -271,12 +298,15 @@ if __name__ == "__main__":
                                                         test_size=test_split,
                                                         random_state=shuffle_seed,
                                                         shuffle=True)
-    train_tensor = make_training_data(training_data_raw)
+    train_tensor = make_training_data(training_data_raw, text_length=text_length)
     timer("data_splitting")
 
     print("Initilising ParagraphSelector...")
     ps = ParagraphSelector()
-    losses = ps.train(train_tensor, epochs=epochs, batch_size=batch_size)
+    losses = ps.train(train_tensor,
+                      epochs=epochs,
+                      batch_size=batch_size,
+                      learning_rate=learning_rate)
     timer("training")
 
     print("Saving model and losses...")
@@ -287,7 +317,10 @@ if __name__ == "__main__":
 
 
     print("Evaluating...")
-    precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw)
+    #TODO make prediction faster by putting the model onto the GPU only once!
+    precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw,
+                                                             text_length=text_length,
+                                                             try_gpu=True)
     print('----------------------')
     print("Precision:", precision)
     print("Recall:", recall)
@@ -297,17 +330,25 @@ if __name__ == "__main__":
     if not os.path.exists(parent_dir + "/models/performance/"):
         os.makedirs(parent_dir + "/models/performance/")
 
-    with open(parent_dir + '/models/performance/outputs.txt', 'w', encoding='utf-8') as f:
+    with open(parent_dir + predictions_rel_path, 'w', encoding='utf-8') as f:
         for i in range(len(ids)):
             f.write(ids[i] + "\t" + \
                     ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
                     ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
 
-    with open(parent_dir + '/models/performance/results.txt', 'w', encoding='utf-8') as f:
-        f.write("Outputs in: " + parent_dir + '/models/performance/outputs.txt'+ \
+    with open(parent_dir + performance_rel_path, 'w', encoding='utf-8') as f:
+        f.write("Outputs in:  " + parent_dir + predictions_rel_path + \
                 "\nPrecision: " + str(precision) + \
-                "\nRecall: " + str(recall) + \
-                "\nF score: " + str(f1))
+                "\nRecall:    " + str(recall) + \
+                "\nF score:   " + str(f1) + "\n")
+        f.write("Hyper parameters:" + \
+                "\ndataset size: " + str(dataset_size) + \
+                "\ntest split:   " + str(test_split) + \
+                "\nshuffle seed: " + str(shuffle_seed) + \
+                "\ntext length:  " + str(text_length) + \
+                "\nepochs:       " + str(epochs) + \
+                "\nbatch size:   " + str(batch_size))
+
         timer.total()
         f.write("\n\nTimes taken:\n" + str(timer))
         print("\ntimes taken:\n", timer)
