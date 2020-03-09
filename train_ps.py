@@ -9,6 +9,7 @@ from utils import ConfigReader
 from modules import ParagraphSelector
 
 import argparse
+import sys
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 
@@ -28,11 +29,10 @@ if __name__ == '__main__':
     cfg = ConfigReader(args.config_file)
 
     model_abs_path = cfg('model_abs_dir') + args.model_name
-    model_abs_path += '.pt' if not args.model_name.endswith('.pt') else model_abs_path
+    model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
     losses_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".losses"
     traintime_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".times"
     take_time("parameter input")
-
 
 
     #========== DATA PREPARATION
