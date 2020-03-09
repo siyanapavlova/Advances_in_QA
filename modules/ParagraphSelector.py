@@ -96,11 +96,9 @@ class ParagraphSelector():
                 # only the first token (0) (this is the [CLS token]), 
                 # all its dimensions (:) (768 with bert-base-uncased)
 
-                #with torch.no_grad(): #TODO re-activate this, otherwise the GPU will crash
-                #    embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
+                with torch.no_grad():
+                    embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
 
-                embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
-                #embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :] #CLEANUP?
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
                 return output 
