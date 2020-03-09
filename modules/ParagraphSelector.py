@@ -95,8 +95,11 @@ class ParagraphSelector():
                 # [:,0,:] - we want for all the sentence (:),
                 # only the first token (0) (this is the [CLS token]), 
                 # all its dimensions (:) (768 with bert-base-uncased)
-                with torch.no_grad():
-                    embedding = self.encoder_model(token_ids)[-2][-1][:,0,:]
+
+                #with torch.no_grad(): #TODO re-activate this, otherwise the GPU will crash
+                #    embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
+
+                embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
                 #embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :] #CLEANUP?
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
@@ -137,7 +140,6 @@ class ParagraphSelector():
         train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True) 
 
         # Iterate over the epochs
-        N = len(train_data)
         for epoch in range(epochs):
             print('Epoch %d/%d' % (epoch + 1, epochs))
             
@@ -317,7 +319,6 @@ if __name__ == "__main__":
 
 
     print("Evaluating...")
-    #TODO make prediction faster by putting the model onto the GPU only once!
     precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw,
                                                              text_length=text_length,
                                                              try_gpu=True)
