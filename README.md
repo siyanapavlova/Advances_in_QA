@@ -30,3 +30,6 @@ The paper describes an architecture which is split into 5 modules:
 4) **fusion block** – the heard of the DFGN – looks at parts of the entity graph for several iterations
 5) **LSTM prediction layer** takes the fusion block's output and returns the final answer
 
+
+### To run the paragraph selector
+python train_ps.py config/train_ps_80-20.cfg paragraph-selector
