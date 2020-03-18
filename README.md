@@ -33,3 +33,11 @@ The paper describes an architecture which is split into 5 modules:
 
 ### To run the paragraph selector
 python train_ps.py config/train_ps_80-20.cfg paragraph-selector
+
+
+### Files and Directories
+
+- `modules/` — the main modules of the architecture
+- `playground/` — code snippets and little scripts
+- `models/` — models for all trainable modules
+- `config/` — configuration files; input to ConfigReader objects
