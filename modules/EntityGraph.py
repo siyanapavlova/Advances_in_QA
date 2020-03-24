@@ -236,6 +236,7 @@ class EntityGraph():
             self.graph[id].update({"context_span": (start, end)})
 
     def tok2ent(self, add_token_mapping_to_graph=False):
+        #TODO rename this to avoid confusion with FusionBlock.tok2ent()!
         """
         Create a mapping (and subsequently, the matrix M) from entity IDs to
         token IDs, having used BertTokenizer for tokenization. If specified,
