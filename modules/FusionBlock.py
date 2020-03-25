@@ -165,8 +165,7 @@ class FusionBlock():
 
 		for i, h_i in enumerate(hidden): # h_i.shape = (d_2, 2d_2)
 			for j, rel_type in self.graph[i]["links"]: # only for neighbor nodes
-				pair = torch.cat((h_i, hidden[j])) # 2d_2 x 2d_2 # TODO CONTINUE HERE: read the GAT paper,
-																 # TODO decide on the shape of W and hidden, ...
+				pair = torch.cat((h_i, hidden[j])) # 2d_2 x 2d_2 # TODO CONTINUE HERE: read the GAT paper, ...
 				betas[i][j] = F.leaky_relu(torch.matmul(W.T, pair)) # formula 6
 
 			sumex = sum([exp(betas[i][j]) for j in range(N)]) # TODO how to handle cases of betas[i][j]==0?
