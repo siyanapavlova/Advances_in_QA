@@ -179,7 +179,7 @@ class FusionBlock():
 			score_sum = sum([alphas[j][i] * hidden[j] for j, rel_type in self.graph[i]["links"]])
 			E_t.append(F.relu(score_sum)) # formula 8
 
-		return torch.Tensor(E_t)
+		return torch.Tensor(E_t) #TODO these have to be of shape (2d_d, N)
 
 	def update_query(self, updated_ent_emb):
 		"""
