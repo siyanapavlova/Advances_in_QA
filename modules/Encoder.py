@@ -29,7 +29,7 @@ class Encoder():
         
         class BiDAFNet(torch.nn.Module):
             """
-            TODO: write docstring
+            TODO: write docstring.
 
             BiDAF paper: arxiv.org/pdf/1611.01603.pdf
             There's a link to the code, but that uses TensorFlow
@@ -51,9 +51,11 @@ class Encoder():
                 self.reduction_layer = Linear(hidden_size * 4, output_size)
 
             def forward(self, q_token_ids, c_token_ids, batch=1):
+                #TODO docstring
 
                 def att_flow_layer(q, c):
                     """
+                    perform bidrectional attention flow and return the updated context
                     :param c: (batch, c_len, hidden_size)
                     :param q: (batch, q_len, hidden_size)
                     :return: (batch, c_len, output_size)
