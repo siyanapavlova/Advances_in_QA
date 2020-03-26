@@ -3,7 +3,7 @@ This class implements the Entity Graph Constructor from the paper, section 3.2
 """
 
 import sys
-from pycorenlp import StanfordCoreNLP #CLEANUP when not calling the server anymore
+from pycorenlp import StanfordCoreNLP
 from transformers import BertTokenizer
 from flair.data import Sentence
 from flair.models import SequenceTagger
@@ -75,7 +75,7 @@ class EntityGraph():
         self._connect_nodes()
         self._add_entity_spans()
         self.prune(max_nodes) # requires entity links
-        self.M = self.tok2ent(add_token_mapping_to_graph=True)
+        self.M = self.entity_matrix(add_token_mapping_to_graph=True)
 
     def __repr__(self):
         result = f""
@@ -120,7 +120,6 @@ class EntityGraph():
             for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
                 sentences = [paragraph[0]] + paragraph[1] # merge header and sentences to one list
                 for sent_id, sentence in enumerate(sentences):  # first sentence is the paragraph title
-                    print("NER of", sent_id, "-", sentence) #CLEANUP
                     annotated = tagger.annotate(sentence,
                                              properties={"annotators": "ner",
                                                          "outputFormat": "json"})
@@ -235,8 +234,7 @@ class EntityGraph():
         for id, (start, end) in abs_spans.items():
             self.graph[id].update({"context_span": (start, end)})
 
-    def tok2ent(self, add_token_mapping_to_graph=False):
-        #TODO rename this to avoid confusion with FusionBlock.tok2ent()!
+    def entity_matrix(self, add_token_mapping_to_graph=False):
         """
         Create a mapping (and subsequently, the matrix M) from entity IDs to
         token IDs, having used BertTokenizer for tokenization. If specified,
@@ -299,7 +297,7 @@ class EntityGraph():
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
-        return the context as a single string,
+        return the context as a single string.
         :return: string containing the whole context
         """
 
@@ -366,29 +364,3 @@ class EntityGraph():
         """
         return len(self.relation_triplets())/len(self.graph)
 
-    def visualize(self, This_method_doesnt_work): #CLEANUP?
-        #TODO implement visualization code?
-        # https://www.data-to-viz.com/graph/network.html
-        """
-        node labels: entity name (paragraph, sentence)
-        edges color-coded
-
-
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import matplotlib
-        import pandas as pd
-        import networkx as nx
-        from modules.EntityGraph import EntityGraph
-
-        color_codes = {0: "blue", 1: "green", 2: "red"}
-        g = EntityGraph()
-        connections = [str(c[0]) + " " +
-                       str(c[1]) + " " +
-                       "{'color':'" + color_codes[c[2]] + "'}" for c in
-                            g.relation_triplets()]
-        G = nx.parse_edgelist(connections, nodetype=int)
-        nx.draw(G)
-        plt.show()
-        """
-        pass

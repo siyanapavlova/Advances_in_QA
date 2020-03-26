@@ -165,8 +165,12 @@ class Encoder():
             
         
         # Tokenize and encode the query and the context
-        query_input_ids = self.tokenizer.encode(query, add_special_tokens=False)
-        context_input_ids = self.tokenizer.encode(flatten_context(context), add_special_tokens=False)
+        query_input_ids = self.tokenizer.encode(query,
+                                                add_special_tokens=False,
+                                                max_length=512)
+        context_input_ids = self.tokenizer.encode(flatten_context(context),
+                                                  add_special_tokens=False,
+                                                  max_length=512)
         
         return query_input_ids, context_input_ids
     
