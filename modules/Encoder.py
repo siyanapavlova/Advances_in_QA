@@ -8,7 +8,7 @@ import os,sys,inspect
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir) 
-from utils import flatten_context, Linear
+from utils import flatten_context, Linear, BiDAFNet
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -29,7 +29,7 @@ class Encoder():
         """
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') if not tokenizer else tokenizer
         
-        class BiDAFNet(torch.nn.Module):
+        class EncoderBiDAF(torch.nn.Module):
             """
             This class implements bidirectional attention flow (BiDAF) as
             described in Seo et al. (2016): arxiv.org/pdf/1611.01603.pdf
@@ -44,17 +44,13 @@ class Encoder():
                 :param output_size: output (specified to 300)
                 :param encoder_model: defaults to 'bert-base-uncased'
                 """
-                super(BiDAFNet, self).__init__()
+                super(EncoderBiDAF, self).__init__()
 
                 self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
                                  output_hidden_states=True,
                                  output_attentions=True) if not encoder_model else encoder_model
-                
-                self.att_weight_c = Linear(hidden_size, 1)
-                self.att_weight_q = Linear(hidden_size, 1)
-                self.att_weight_cq = Linear(hidden_size, 1)
 
-                self.reduction_layer = Linear(hidden_size * 4, output_size)
+                self.bidaf = BiDAFNet(hidden_size=hidden_size, output_size=output_size)
 
             def forward(self, q_token_ids, c_token_ids, batch=1):
                 """
@@ -64,44 +60,6 @@ class Encoder():
                 :param c_token_ids: list[int] - obtained from a tokenizer
                 :return: encoded and BiDAF-ed context of shape (batch, c_len, output_size)
                 """
-
-                def att_flow_layer(q, c):
-                    """
-                    Perform BiDAF and return the updated context.
-                    :param q: encoded query of shape (batch, q_len, hidden_size)
-                    :param c: encoded context of shape (batch, c_len, hidden_size)
-                    :return: encoded context (batch, c_len, output_size)
-                    """
-                    c_len = c.size(1)
-                    q_len = q.size(1)
-
-                    cq = []
-                    for i in range(q_len):
-                        qi = q.select(1, i).unsqueeze(1) # (batch, 1, hidden_size)
-                        ci = self.att_weight_cq(c * qi).squeeze(-1) # (batch, c_len, 1)
-                        cq.append(ci)
-                    cq = torch.stack(cq, dim=-1) # (batch, c_len, q_len)
-
-                    # (batch, c_len, q_len)
-                    s = self.att_weight_c(c).expand(-1, -1, q_len) + \
-                        self.att_weight_q(q).permute(0, 2, 1).expand(-1, c_len, -1) + \
-                        cq
-
-                    a = F.softmax(s, dim=2) # (batch, c_len, q_len)
-                    # (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
-                    c2q_att = torch.bmm(a, q)
-
-                    b = F.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1)  # (batch, 1, c_len)
-                    # (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
-                    q2c_att = torch.bmm(b, c).squeeze(1)
-                    # (batch, c_len, hidden_size) (tiled)
-                    q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
-
-                    # (batch, c_len, hidden_size * 4)
-                    x = torch.cat([c, c2q_att, c * c2q_att, c * q2c_att], dim=-1)
-                    x = self.reduction_layer(x) # (batch, c_len, output_size)
-                    return x
-                
                 
                 len_query = len(q_token_ids)
                 len_context = len(c_token_ids)
@@ -140,10 +98,10 @@ class Encoder():
                 #print(q_emb)
                 #print(c_emb)
             
-                g = att_flow_layer(q_emb, c_emb)
+                g = self.bidaf(q_emb, c_emb)
                 return g
         
-        self.net = BiDAFNet(encoder_model=encoder_model)
+        self.net = EncoderBiDAF(encoder_model=encoder_model)
 
     def encode(self, query=None, context=None):
         """

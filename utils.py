@@ -12,6 +12,8 @@ import json
 #from tqdm import tqdm
 from time import time
 from torch import nn
+import torch
+from torch import functional as F
 
 
 def loop_input(rtype=str, default=None, msg=""):
@@ -234,6 +236,32 @@ class ConfigReader():
     def set(self, paramname, value):
         self.params.update({paramname:value})
 
+class Timer():
+    # TODO docstring
+    def __init__(self):
+        self.T0 = time()
+        self.t0 = time()
+        self.times = {}
+        self.steps = []
+        self.period_name = ""
+
+    def __call__(self, periodname):
+        span = time() - self.t0
+        self.t0 = time()
+        self.steps.append(periodname)
+        self.times.update({periodname: span})
+        return span
+
+    def __repr__(self, *args):
+        steps = [s for s in args if s in self.steps] if args else self.steps
+        return "\n".join([str(round(self.times[k], 5)) + "   " + k for k in steps])
+
+    def total(self):
+        span = time() - self.T0
+        self.steps.append("total")
+        self.times.update({"total": span})
+        return span
+
 class HotPotDataHandler():
     """
     This class provides an interface to the HotPotQA dataset.
@@ -293,29 +321,70 @@ class Linear(nn.Module):
         x = self.linear(x)
         return x
 
-class Timer():
-    # TODO docstring
-    def __init__(self):
-        self.T0 = time()
-        self.t0 = time()
-        self.times = {}
-        self.steps = []
-        self.period_name = ""
+class BiDAFNet(torch.nn.Module):
+    """
+    TODO: write docstring
 
-    def __call__(self, periodname):
-        span = time() - self.t0
-        self.t0 = time()
-        self.steps.append(periodname)
-        self.times.update({periodname: span})
-        return span
+    BiDAF paper: arxiv.org/pdf/1611.01603.pdf
+    There's a link to the code, but that uses TensorFlow
 
-    def __repr__(self, *args):
-        steps = [s for s in args if s in self.steps] if args else self.steps
-        return "\n".join([str(round(self.times[k], 5)) + "   " + k for k in steps])
+    We adapted this implementation of the BiDAF
+    Attention Layer: https://github.com/galsang/BiDAF-pytorch
+    """
 
-    def total(self):
-        span = time() - self.T0
-        self.steps.append("total")
-        self.times.update({"total": span})
-        return span
+    def __init__(self, hidden_size=768, output_size=300):
+        super(BiDAFNet, self).__init__()
+
+        self.att_weight_c = Linear(hidden_size, 1)
+        self.att_weight_q = Linear(hidden_size, 1)
+        self.att_weight_cq = Linear(hidden_size, 1)
+
+        self.reduction_layer = Linear(hidden_size * 4, output_size)
+
+    def forward(self, emb1, emb2, batch=1):
+        """
+        perform bidaf and return the updated emb2.
+        using 'q' and 'c' instead of 'emb1' and 'emb2' for readability
+        :param emb2: (batch, c_len, hidden_size)
+        :param emb1: (batch, q_len, hidden_size)
+        :return: (batch, c_len, output_size)
+        """
+        c_len = emb2.size(1)
+        q_len = emb1.size(1)
+
+        cq = []
+        for i in range(q_len):
+            qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
+            ci = self.att_weight_cq(emb2 * qi).squeeze(-1)  # (batch, c_len, 1)
+            cq.append(ci)
+        cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
+
+        # (batch, c_len, q_len)
+        s = self.att_weight_c(emb2).expand(-1, -1, q_len) + \
+            self.att_weight_q(emb1).permute(0, 2, 1).expand(-1, c_len, -1) + \
+            cq
+
+        a = F.softmax(s, dim=2)  # (batch, c_len, q_len)
+
+        # (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
+        c2q_att = torch.bmm(a, emb1)
+
+        b = F.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1)  # (batch, 1, c_len)
+
+        # (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
+        q2c_att = torch.bmm(b, emb2).squeeze(1)
+
+        # (batch, c_len, hidden_size) (tiled)
+        q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
+
+        # (batch, c_len, hidden_size * 4)
+        x = torch.cat([emb2, c2q_att, emb2 * c2q_att, emb2 * q2c_att], dim=-1)
+        x = self.reduction_layer(x)  # (batch, c_len, output_size)
+        return x
+
+
+
+
+
+
 

@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from utils import Linear #TODO why from utils?
+from utils import Linear, BiDAFNet
 
 class FusionBlock():
 	"""
@@ -19,74 +19,6 @@ class FusionBlock():
 		:param query_emb:
 		:param graph:
 		"""
-
-		class BiDAFNet(torch.nn.Module):
-			"""
-			TODO: write docstring.
-
-			BiDAF paper: arxiv.org/pdf/1611.01603.pdf
-			There's a link to the code, but that uses TensorFlow
-
-			We adapted this implementation of the BiDAF
-			Attention Layer: https://github.com/galsang/BiDAF-pytorch
-			"""
-
-			def __init__(self, hidden_size=768, output_size=300):
-				super(BiDAFNet, self).__init__()
-
-				self.att_weight_c = Linear(hidden_size, 1)
-				self.att_weight_q = Linear(hidden_size, 1)
-				self.att_weight_cq = Linear(hidden_size, 1)
-
-				self.reduction_layer = Linear(hidden_size * 4, output_size)
-
-			def forward(self, emb1, emb2, batch=1):
-				# TODO docstring
-
-				def att_flow_layer(emb1, emb2):
-					"""
-					perform bidaf and return the updated emb2.
-					using 'q' and 'c' instead of 'emb1' and 'emb2' for readability
-					:param emb2: (batch, c_len, hidden_size)
-					:param emb1: (batch, q_len, hidden_size)
-					:return: (batch, c_len, output_size)
-					"""
-					c_len = emb2.size(1)
-					q_len = emb1.size(1)
-
-					cq = []
-					for i in range(q_len):
-						qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
-						ci = self.att_weight_cq(emb2 * qi).squeeze(-1)  # (batch, c_len, 1)
-						cq.append(ci)
-					cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
-
-					# (batch, c_len, q_len)
-					s = self.att_weight_c(emb2).expand(-1, -1, q_len) + \
-						self.att_weight_q(emb1).permute(0, 2, 1).expand(-1, c_len, -1) + \
-						cq
-
-					a = F.softmax(s, dim=2)  # (batch, c_len, q_len)
-
-					# (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
-					c2q_att = torch.bmm(a, emb1)
-
-					b = F.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1)  # (batch, 1, c_len)
-
-					# (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
-					q2c_att = torch.bmm(b, emb2).squeeze(1)
-
-					# (batch, c_len, hidden_size) (tiled)
-					q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
-
-					# (batch, c_len, hidden_size * 4)
-					x = torch.cat([emb2, c2q_att, emb2 * c2q_att, emb2 * q2c_att], dim=-1)
-					x = self.reduction_layer(x)  # (batch, c_len, output_size)
-					return x
-
-				g = att_flow_layer(emb1, emb2)
-				return g
-
 		self.context_emb = context_emb # M x d_2
 		self.query_emb = query_emb # L x d_2
 		self.bin_M = graph.M # M x N
@@ -97,12 +29,12 @@ class FusionBlock():
 		self.bidaf = BiDAFNet()
 
 
-	def execute(self):
-		""" """
-		""" this is just for an overview """
+	def forward(self):
+		#TODO docstring
 		self.entity_embs = self.tok2ent()
 		updated_entity_embs = self.graph_attention()
-		self.query_emb = self.update_query(updated_entity_embs)
+
+		self.query_emb = self.bidaf(updated_entity_embs, self.query_emb) # update query
 
 
 	def tok2ent(self):
@@ -181,13 +113,6 @@ class FusionBlock():
 
 		return torch.Tensor(E_t) #TODO these have to be of shape (2d_d, N)
 
-	def update_query(self, updated_ent_emb):
-		"""
-		#TODO docstring
-		:param updated_ent_emb:
-		:return:
-		"""
-		return self.bidaf(updated_ent_emb, self.query_emb) # formula 9
 
 	def graph2doc(self, e_embs):
 		"""
