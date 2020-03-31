@@ -26,16 +26,25 @@ def make_training_data(data,
                        pad_token_id = 0,
                        tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
     """
-    #TODO docstring
-    Make a dataframe with training data for selecting relevant paragraphs
-    Each entry in the dataframe has three columns:
-    1. id -- ID of the question
-    2. label -- 0 (unrelated) or 1 (related)
-    3. tokens -- token IDs of query and paragraph
-    :param data: question ID, supporting facts, question, and paragraphs
+    Make a train tensor for each datapoint.
+
+    :param data: question ID, supporting facts, question, and paragraphs, 
+                 as returned by HotPotDataHandler
     :type data: list(tuple(str, list(str), str, list(list(str, list(str)))))
+    :param text_length: id of the pad token used to pad when
+                        the paragraph is shorter then text_length
+                        default is 0
+    :param pad_token_id: text_length of the paragraph - paragraph will
+                         be padded if its lenght is less than this value
+                         and trimmed if it is more, default is 512
     :param tokenizer: default: BertTokenizer(bert-base-uncased)
-    :return: DataFame
+
+    :return: a train tensor with two columns:
+                1. token_ids as returned by the tokenizer for
+                   [CLS] + query + [SEP] + paragraph + [SEP]
+                   (10 entries per datapoint, one of each paragraph)
+                2. labels for the points - 0 if the paragraphs is
+                   no relevant to the query, and 1 otherwise
     """
 
     labels = []
@@ -65,7 +74,12 @@ def make_training_data(data,
 
 class ParagraphSelector():
     """
-    TODO: write docstring
+    This class implements all that is necessary for training
+    a paragraph selector model (as per the requirement in the 
+    paper), predicting relevance scores for paragraph-query pairs
+    and building the context for HotPotQA datapoint. Additionally,
+    it also allows for saving a trained model, loading a trained 
+    model from a file, and evaluating a model.
     """
     
     def __init__(self,
@@ -73,15 +87,27 @@ class ParagraphSelector():
                  tokenizer=None,
                  encoder_model=None):
         """
-        TODO: write docstring
+        Initialization function for the ParagraphSelector class
+
+        :param model_path: path to an already trained model (only
+                           necessary if we want to load a pretrained
+                           model)
+        :param tokenizer: a tokenizer, default is BertTokenizer.from_pretrained('bert-base-uncased')
+        :param encoder_model: an encoder model, default is BertModel.from_pretrained('bert-base-uncased')
         """
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') if not tokenizer else tokenizer
 
         class ParagraphSelectorNet(torch.nn.Module):
             """
-            TODO: write docstring
+            A neural network for the paragraph selector.
             """
             def __init__(self, input_size=768, output_size=1):
+                """
+                Initialization of the encoder model and a linear layer
+
+                :param intput_size: input size for the linear layer
+                :param output_size: output size of the linear layer
+                """
                 super(ParagraphSelectorNet, self).__init__()
                 self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
                                                                output_hidden_states=True,
@@ -89,6 +115,16 @@ class ParagraphSelector():
                 self.linear  = torch.nn.Linear(input_size, output_size)
 
             def forward(self, token_ids):
+                """
+                Forward function of the ParagraphSelectorNet.
+                Takes in token_ids corresponding to a query+paragraph
+                and returns a relevance score (between 0 and 1) for
+                the query and paragraph.
+
+                :param token_ids: token_ids as returned by the tokenizer;
+                                  the text that is passed to the tokenizer
+                                  is constructed by [CLS] + query + [SEP] + paragraph + [SEP]
+                """
 
                 # [-2] is all_hidden_states
                 # [-1] is the last hidden state (list of sentences)
@@ -102,7 +138,9 @@ class ParagraphSelector():
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
                 return output 
-            
+        
+        # initialise a paragraph selector net and try to load
+        # a trained model from a file, if a file has been specified
         self.net = ParagraphSelectorNet()
         if model_path:
             try:
@@ -113,6 +151,24 @@ class ParagraphSelector():
     def train(self, train_data, epochs=10, batch_size=1, learning_rate=0.0001):
         """
         TODO: write docstring
+        Train a ParagraphSelectorNet on a training dataset.
+        Binary Cross Entopy is used as the loss function.
+        Adam is used as the optimizer.
+
+        :param train_data: a tensor as returned by the make_training_data() function;
+                           it has two columns:
+                        a train tensor with two columns:
+                            1. token_ids as returned by the tokenizer for
+                               [CLS] + query + [SEP] + paragraph + [SEP]
+                               (10 entries per datapoint, one of each paragraph)
+                            2. labels for the points - 0 if the paragraphs is
+                               no relevant to the query, and 1 otherwise
+        :param epochs: number of training epochs, default is 10
+        :param batch_size: batch size for the training, default is 1
+        :param learning_rate: learning rate for the optimizer,
+                              default is 0.0001
+
+        :return losses: a list of losses
         """
         # Use Binary Cross Entropy as a loss function instead of MSE
         # There are papers on why MSE is bad for classification
@@ -157,7 +213,48 @@ class ParagraphSelector():
     
     def evaluate(self, data, threshold=0.1, pad_token_id=0, text_length=512, try_gpu=True):
         """
-        TODO: write docstring
+        Evaluate a trained model on a dataset.
+
+        :param data: a list of datapoints where each point has the
+                     following structure:
+                        (question_id, supporting_facts, query, paragraphs),
+                        where question_id is a string corresponding
+                              to the datapoint id in HotPotQA
+                        supporting_facts is a list of strings,
+                        query is a string,
+                        paragraphs is a 10-element list where
+                            the first element is a string
+                            the second element is a list of sentences (i.e., a list of strings)
+
+        :param threshold: a float between zero and one;
+                          paragraphs that get a score above the
+                          threshold, become part of the context,
+                          default is 0.1
+        :param pad_token_id: id of the pad token used to pad when
+                             the paragraph is shorter then text_length
+                             default is 0
+        :param text_length: text_length of the paragraph - paragraph will
+                            be padded if its lenght is less than this value
+                            and trimmed if it is more, default is 512
+        :param try_gpu: boolean specifying whether to use GPU for
+                        computation if GPU is available; default is True
+
+        :return precision: precision for the model
+        :return recall: recall for the model
+        :return f1: f1 score for the model
+        :return ids: list of ids of all the evaluated points
+        :return all_true: true labels for the datapoints
+                          list(list(boolean)), a list of datapoints
+                          where each datapoint is a list of 
+                          booleans; each boolean corresponds to whether
+                          the corresponding paragraph is relevant to
+                          the query or not
+        :return all_pred: precited labels for the datapoints
+                          list(list(boolean)), a list of datapoints
+                          where each datapoint is a list of 
+                          booleans; each boolean corresponds to whether
+                          the corresponding paragraph is relevant to
+                          the query or not
         """
         all_true = []
         all_pred = []
@@ -196,9 +293,13 @@ class ParagraphSelector():
     
     def predict(self, p, device=torch.device('cpu')):
         """
-        Given the encoding of a paragraph (query + paragraph),
-        return the score that the model predicts for that paragraph
-        :param p: encoding of the paragraph (along with the query), as described in the paper
+        Given the token_ids of a query+paragraph for a specific paragraph,
+        return the relevance score that the model predicts between the query
+        and the paragraph
+
+        :param p: token_ids as returned by the tokenizer;
+                  the text that is passed to the tokenizer
+                  is constructed by [CLS] + query + [SEP] + paragraph + [SEP]
         :return: score between 0 and 1 for that paragraph
         """
 
@@ -218,18 +319,37 @@ class ParagraphSelector():
     def make_context(self, datapoint, threshold=0.1,
                      pad_token_id=0, text_length=512, device=torch.device('cpu')):
         """
-        TODO: write docstring
-        
-        Parameters: paragraphs - [[p1_title, [p1_s1, p1_s2 ...]],
-                                  [p2_title, [p2_s1, p2_s2, ...]],
-                                   ...]
-                    query - the query as a string
-                    threshold - a float between zero and one;
-                                paragraphs that get a score above the
-                                threshold, become part of the context
-        Output: context: [[p1_title, [p1_s1, p1_s2 ...]],
-                          [p2_title, [p2_s1, p2_s2, ...]],
-                           ...]
+        Given a datapoint from HotPotQA, build the context for it.
+        The context consists of all paragraphs included in that
+        datapoint which have a relevance score higher than a 
+        specific value (threshold) to the query of that datapoint.
+         
+        :param datapoint: datapoint for which to make context
+                          shape: (question_id, supporting_facts, query, paragraphs),
+                                where question_id is a string corresponding
+                                      to the datapoint id in HotPotQA
+                                supporting_facts is a list of strings,
+                                query is a string,
+                                paragraphs is a 10-element list where
+                                    the first element is a string
+                                    the second element is a list of sentences (i.e., a list of strings)
+        :param threshold: a float between zero and one;
+                          paragraphs that get a score above the
+                          threshold, become part of the context,
+                          default is 0.1
+        :param pad_token_id: id of the pad token used to pad when
+                             the paragraph is shorter then text_length
+                             default is 0
+        :param text_length: text_length of the paragraph - paragraph will
+                            be padded if its lenght is less than this value
+                            and trimmed if it is more, default is 512
+        :param device: device for processing; default is 'cpu'
+
+        :return context: the context for the datapoint
+                shape: [[p1_title, [p1_s1, p1_s2 ...]],
+                        [p2_title, [p2_s1, p2_s2, ...]],
+                        ...]
+
         """
         context = []
 
@@ -254,7 +374,10 @@ class ParagraphSelector():
 
     def save(self, savepath):
         '''
-        TODO: write docstring
+        Save the trained model to a file.
+
+        :param savepath: relative path to where the model
+                         should be saved, including filename(?)
         '''
         directory_name = "/".join(savepath.split('/')[:-1])
         print("Save to:", directory_name)
