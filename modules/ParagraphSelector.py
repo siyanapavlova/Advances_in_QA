@@ -150,7 +150,6 @@ class ParagraphSelector():
 
     def train(self, train_data, epochs=10, batch_size=1, learning_rate=0.0001):
         """
-        TODO: write docstring
         Train a ParagraphSelectorNet on a training dataset.
         Binary Cross Entopy is used as the loss function.
         Adam is used as the optimizer.
