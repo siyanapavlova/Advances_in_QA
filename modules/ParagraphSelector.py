@@ -56,7 +56,7 @@ def make_training_data(data,
             point_string = point[2] + " [SEP] " + ("").join(para[1])
             
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = tokenizer.encode( point_string )
+            token_ids = tokenizer.encode(point_string, max_length=512)
             
             # Add padding if there are fewer than text_length tokens,
             # else trim to text_length
@@ -132,8 +132,8 @@ class ParagraphSelector():
                 # only the first token (0) (this is the [CLS token]), 
                 # all its dimensions (:) (768 with bert-base-uncased)
 
-                #with torch.no_grad(): #TODO re-activate this!
-                embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
+                with torch.no_grad(): #TODO de-activate this?
+                    embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
 
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
@@ -354,7 +354,8 @@ class ParagraphSelector():
 
         for p in datapoint[3]:
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]))
+            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]),
+                                              max_length=512)
 
             # Add padding if there are fewer than text_length tokens,
             # else trim to text_length
