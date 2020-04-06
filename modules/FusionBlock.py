@@ -64,7 +64,7 @@ class FusionBlock(nn.Module):
 		entity_emb = entity_emb.permute(1, 2, 0) # M x N x d_2 -> N x d_2 x M
 
 		# For the next two lines: (N, d_2, M) -> (N, d_2, 1) -> (N, d_2)
- 		mean_pooling = F.avg_pool1d(entity_emb, kernel_size=M).squeeze(-1)
+		mean_pooling = F.avg_pool1d(entity_emb, kernel_size=M).squeeze(-1)
 		max_pooling = F.max_pool1d(entity_emb, kernel_size=M).squeeze(-1)
 
 		entity_emb = torch.cat((mean_pooling, max_pooling), dim=-1) # (N, 2d_2)

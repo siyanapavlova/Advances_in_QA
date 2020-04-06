@@ -92,7 +92,7 @@ class Encoder():
                 # parts of the context embedding
                 else:
                     c_emb = all_hidden_states[-1][0][len_query:len_query+len_context]
-                
+
                 #print("Query shape:", q_emb.shape) #CLEANUP?
                 #print("Context shape:", c_emb.shape)
                 #print(q_emb)
@@ -141,6 +141,9 @@ class Encoder():
     
     def train(self, q_token_ids, c_token_ids):
         self.net.forward(q_token_ids, c_token_ids)
+
+    def predict(self, q_token_ids, c_token_ids):
+        return self.net(q_token_ids, c_token_ids)
         
 
 if __name__=="__main__":
