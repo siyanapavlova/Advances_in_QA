@@ -29,10 +29,12 @@ class Predictor(nn.Module):
         QUESTIONNNNNSSSSS:
 
         1. Where does 2*d_2 come from (authors' code, line 365, 368, etc.)
-        2. How are the embeddings concatenated for the linear layer (by row or column?)?
+        2. How are the embeddings concatenated for the linear layer (by row or column?)? 
+            -> along the first dimension (below each other)
         3. Why do they use a linear layer for 'support' as well when there's none in the Yang paper
         4. What about self attention?
         5. Where do the coefficients come from? Where are they defined and why? (lambdas in formula 15)
+            -> e.g. defined as hyperparameters. Maybe they'r edefined somewhere in their code
         6. Why do they add 1 to input_dim in lines 367, 370 and 373?
         7. What about the weakly supervised signal?
         8. What are heuristic masks?
