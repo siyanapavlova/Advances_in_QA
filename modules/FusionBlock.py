@@ -38,8 +38,9 @@ class FusionBlock(nn.Module):
 
 
 
-	def forward(self):
+	def forward(self, passes=1):
 		#TODO docstring
+		#TODO impolement the multiple passes here
 		self.entity_embs = self.tok2ent() # (2d_2, N)
 		updated_entity_embs = self.graph_attention() # (N, d2)
 
@@ -50,26 +51,44 @@ class FusionBlock(nn.Module):
 	def tok2ent(self):
 		"""
 		Document to Graph Flow from the paper (section 3.4)
-
-		:param context_emb: M x d_2 (context embedding from Encoder)
-		:param bin_M: M x N (binary matrix from EntityGraph)
-		:return : (2d_2, N)
+		#TODO update docstring
+		:param context_emb: (batch, M, d2) (context embedding from Encoder)
+		:param bin_M: (M, N) (binary matrix from EntityGraph)
+		:return : (batch, 2d2, N)
 		"""
-		M = self.context_emb.shape[0]
+		M = self.context_emb.shape[1]
 		N = self.bin_M.shape[1]
+		#print(f"context_emb: {self.context_emb.shape}")#CLEANUP
+		#print(f"bin_M: {self.bin_M.shape}")  # CLEANUP
 
-		entity_emb = self.context_emb.expand(-1, N, -1) # M x N x d_2
-		bin_M_prime = self.bin_M.unsqueeze(2) # M x N x 1
-		entity_emb = entity_emb * bin_M_prime # M x N x d_2
-		entity_emb = entity_emb.permute(1, 2, 0) # M x N x d_2 -> N x d_2 x M
+		entity_emb = self.context_emb.unsqueeze(2).expand(-1, -1, N, -1) # (batch, M, N, d2)
+		#print(f"entity_emb1: {entity_emb.shape}")  # CLEANUP
 
-		# For the next two lines: (N, d_2, M) -> (N, d_2, 1) -> (N, d_2)
-		mean_pooling = F.avg_pool1d(entity_emb, kernel_size=M).squeeze(-1)
-		max_pooling = F.max_pool1d(entity_emb, kernel_size=M).squeeze(-1)
+		bin_M_prime = self.bin_M.unsqueeze(2) # (M, N, 1)
+		#print(f"bin_M_prime: {bin_M_prime.shape}")  # CLEANUP
 
-		entity_emb = torch.cat((mean_pooling, max_pooling), dim=-1) # (N, 2d_2)
+		entity_emb = entity_emb * bin_M_prime # (batch, M, N, d2) * (M, N 1) = (batch, M, N, d2)
+		#print(f"entity_emb2: {entity_emb.shape}")  # CLEANUP
 
-		return entity_emb.T # (2d_2, N)
+		entity_emb = entity_emb.permute(0, 2, 3, 1) # (batch, M, N, d2) -> (batch, N, d2, M)
+		#print(f"entity_emb3: {entity_emb.shape}")  # CLEANUP
+
+		# For the next lines: (batch, N, d2, M) -> (batch, N, d2, 1) -> (batch, N, d2)
+		means, maxes = [], []
+		for point in entity_emb: #TODO try to avoid the for loop (maybe by batch pooling?)
+			means.append(F.avg_pool1d(point, kernel_size=M).squeeze(-1))
+			maxes.append(F.max_pool1d(point, kernel_size=M).squeeze(-1))
+
+		mean_pooling = torch.stack(means)
+		max_pooling = torch.stack(maxes)
+
+		#mean_pooling = F.avg_pool1d(entity_emb, kernel_size=M).squeeze(-1)
+		#max_pooling = F.max_pool1d(entity_emb, kernel_size=M).squeeze(-1)
+
+		entity_emb = torch.cat((mean_pooling, max_pooling), dim=-1) # (batch, N, 2d2)
+		#print(f"entity_emb4: {entity_emb.shape}")  # CLEANUP
+
+		return entity_emb.permute(0, 2, 1) # (batch, 2d2, N)
 
 	def graph_attention(self):
 		"""
@@ -78,9 +97,9 @@ class FusionBlock(nn.Module):
 		"""
 		#TODO avoid for-loops, but first make the method run.
 		#TODO avoid torch.Tensor where possible.
-
-		N = self.e_embs.shape[1] # number of entities, taken from  (2dd, N)
-		assert N == len(self.graph) # CLEANUP? # N should be equal to the number of graph nodes
+		#TODO change all this to comply with batches! But before, think about the structure of this whole module.
+		N = self.entity_embs.shape[2] # number of entities, taken from  (batch, 2d2, N) # already altered to comply with batches
+		assert N == len(self.graph.graph) # CLEANUP? # N should be equal to the number of graph nodes
 
 		# formula 1 # (L, d2) --> (1, L, d2) --> (1, d2, L) --> (1, d2, 1)
 		q_emb = F.avg_pool1d(self.query_emb.unsqueeze(0).permute(0, 2, 1),
@@ -88,9 +107,9 @@ class FusionBlock(nn.Module):
 		q_emb = q_emb.permute(0, 2, 1).squeeze(0) # (1, 1, d2) --> (1, d2)
 
 		# N * ( (1, d2) x (d2, 2d2) x (2d2, 1) ) --> (N, 1, 1) # formula 2
-		gammas = torch.tensor([ torch.chain_matmul(q_emb, self.V, e.T)/self.droot for e in self.e_embs.T ]) #TODO avoid for-loop and torch.tensor()
+		gammas = torch.tensor([ torch.chain_matmul(q_emb, self.V, e.T)/self.droot for e in self.entity_embs.T ]) #TODO avoid for-loop and torch.tensor()
 		mask = torch.sigmoid(gammas)   # (N, 1, 1) # formula 3
-		E = torch.tensor([m*e for m,e in zip(mask, self.e_embs.T)])  # (N, 1, 2d2) # formula 4
+		E = torch.tensor([m*e for m,e in zip(mask, self.entity_embs.T)])  # (N, 1, 2d2) # formula 4
 		E = E.squeeze(1).T # (N, 2d2) --> (2d2, N) #TODO do we really need to squeeze?
 
 
@@ -122,7 +141,7 @@ class FusionBlock(nn.Module):
 		return torch.Tensor(E_t).squeeze(dim=-1).T # (N, d2) #TODO avoid torch.Tensor()
 
 
-	def graph2doc(self, e_embs):
+	def graph2doc(self, entity_embs):
 		"""
 		#TODO docstring
 		:return:

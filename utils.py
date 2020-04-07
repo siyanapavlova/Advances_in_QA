@@ -342,7 +342,7 @@ class BiDAFNet(torch.nn.Module):
 
         self.reduction_layer = Linear(hidden_size * 4, output_size)
 
-    def forward(self, emb1, emb2, batch=1):
+    def forward(self, emb1, emb2):
         """
         perform bidaf and return the updated emb2.
         using 'q' and 'c' instead of 'emb1' and 'emb2' for readability
@@ -352,36 +352,42 @@ class BiDAFNet(torch.nn.Module):
         """
         #TODO implement batch size as first axis in the tensors
 
-        q_len = emb1.size(0) # (q_len, hidden_size)
-        c_len = emb2.size(0) # (c_len, hidden_size)
+        # make sure that batch processing works, even for single data points
+        emb1 = emb1.unsqueeze(0) if len(emb1.shape) < 3 else emb1
+        emb2 = emb2.unsqueeze(0) if len(emb2.shape) < 3 else emb2
+
+        q_len = emb1.size(1) # (batch, q_len, hidden_size)
+        c_len = emb2.size(1) # (batch, c_len, hidden_size)
 
         cq = []
         for i in range(q_len):
-            qi = emb1.select(0, i).unsqueeze(0)  # (1, hidden_size)
+            qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
             #print(f"qi: {qi.shape} \n emb1: {emb1.shape} \n emb2: {emb2.shape}") #CLEANUP
-            ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (c_len, 1) --> (c_len,)
-            cq.append(ci)
-        cq = torch.stack(cq, dim=-1)  # (c_len, q_len)
+            ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (batch, c_len, 1) --> (batch, c_len)
+            #print(f"ci: {ci.shape}") #CLEANUP
+            cq.append(ci) # (q_len, batch, c_len)
+        cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
 
-        # (c_len, q_len)
-        s = self.att_weight_c(emb2).expand(-1, q_len) + \
-            self.att_weight_q(emb1).permute(1, 0).expand(c_len, -1) + \
+        # (batch, c_len, q_len)
+        s = self.att_weight_c(emb2).expand(-1, -1, q_len) + \
+            self.att_weight_q(emb1).permute(0, 2, 1).expand(-1, c_len, -1) + \
             cq
+        #print(f"s: {s.shape}") #CLEANUP
 
-        a = nnF.softmax(s, dim=1)  # (c_len, q_len)
+        a = nnF.softmax(s, dim=2)  # (batch, c_len, q_len)
 
-        # (c_len, q_len) * (q_len, hidden_size) -> (c_len, hidden_size)
-        c2q_att = torch.matmul(a, emb1) #torch.bmm(a, emb1)
+        # (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
+        c2q_att = torch.bmm(a, emb1)
 
         #print(f"s: {s.shape}") #CLEANUP #TODO continue here with working without batches
         #TODO or just work with batches.
-        b = nnF.softmax(torch.max(s, dim=1), dim=1).unsqueeze(0)#[0], dim=1).unsqueeze(0)  # (1, c_len)
+        b = nnF.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1) # (batch, 1, c_len)
 
-        # (1, c_len) * (c_len, hidden_size) -> (hidden_size)
-        q2c_att = torch.matmul(b, emb2).squeeze(0) # torch.bmm(b, emb2).squeeze(1)
+        # (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
+        q2c_att = torch.bmm(b, emb2).squeeze(1)
 
-        # (c_len, hidden_size) (tiled)
-        q2c_att = q2c_att.unsqueeze(0).expand(c_len, -1)
+        # (batch, c_len, hidden_size) (tiled)
+        q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
 
         # (batch, c_len, hidden_size * 4)
         x = torch.cat([emb2, c2q_att, emb2 * c2q_att, emb2 * q2c_att], dim=-1)

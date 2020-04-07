@@ -8,6 +8,7 @@ from transformers import BertTokenizer
 from flair.data import Sentence
 from flair.models import SequenceTagger
 import numpy as np
+import torch
 
 class EntityGraph():
     """
@@ -75,7 +76,7 @@ class EntityGraph():
         self._connect_nodes()
         self._add_entity_spans()
         self.prune(max_nodes) # requires entity links
-        self.M = self.entity_matrix(add_token_mapping_to_graph=True)
+        self.M = self.entity_matrix(add_token_mapping_to_graph=True) # a tensor
 
     def __repr__(self):
         result = f""
@@ -239,7 +240,7 @@ class EntityGraph():
         Create a mapping (and subsequently, the matrix M) from entity IDs to
         token IDs, having used BertTokenizer for tokenization. If specified,
         the mapping is added to the graph's nodes (under the key 'token_ids').
-        :return: numpy ndarray of shape (#tokens, #entities) -- the matrix M
+        :return: torch.Tensor of shape (#tokens, #entities) -- the matrix M
         """
 
         """ preparations """
@@ -293,7 +294,7 @@ class EntityGraph():
             for tok in tokens:
                 M[tok][node] = 1
 
-        return M
+        return torch.from_numpy(M)
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
