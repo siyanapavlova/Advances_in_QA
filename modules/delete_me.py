@@ -14,9 +14,7 @@ fusionblock = FusionBlock(c_emb, q_emb, graph)
 
 # these will be shortcut by calling the forward() or fusionblock
 fusionblock.entity_embs = fusionblock.tok2ent()
+fusionblock.entity_embs = fusionblock.entity_embs.unsqueeze(2)
 updated_entity_embs = fusionblock.graph_attention()
 
-
-
-
-
+fusionblock.query_emb = fusionblock.bidaf(updated_entity_embs, fusionblock.query_emb)

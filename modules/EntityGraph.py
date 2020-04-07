@@ -289,7 +289,7 @@ class EntityGraph():
                 self.graph[id].update({"token_ids":mapping[id]})
 
         """ create binary matrix from the mapping """
-        M = np.zeros((len(self.tokens), len(mapping)))
+        M = np.zeros((len(self.tokens), len(mapping)), dtype="float32")
         for node,tokens in mapping.items():
             for tok in tokens:
                 M[tok][node] = 1

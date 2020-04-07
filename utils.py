@@ -342,7 +342,7 @@ class BiDAFNet(torch.nn.Module):
 
         self.reduction_layer = Linear(hidden_size * 4, output_size)
 
-    def forward(self, emb1, emb2):
+    def forward(self, emb1, emb2, batch_processing=False):
         """
         perform bidaf and return the updated emb2.
         using 'q' and 'c' instead of 'emb1' and 'emb2' for readability
@@ -392,7 +392,7 @@ class BiDAFNet(torch.nn.Module):
         # (batch, c_len, hidden_size * 4)
         x = torch.cat([emb2, c2q_att, emb2 * c2q_att, emb2 * q2c_att], dim=-1)
         x = self.reduction_layer(x)  # (batch, c_len, output_size)
-        return x
+        return x.squeeze(0) if not batch_processing else x # (c_len, output_size) if no batch_processing
 
 
 
