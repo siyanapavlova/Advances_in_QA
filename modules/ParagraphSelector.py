@@ -141,14 +141,15 @@ class ParagraphSelector():
         
         # initialise a paragraph selector net and try to load
         # a trained model from a file, if a file has been specified
-
-        self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
-
-        self.net = ParagraphSelectorNet.from_pretrained(
-            model_path,
-            from_tf=bool(".ckpt" in model_path),
-            config=self.config
-        )  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+        if model_path: #TODO use this (partly taken from Stalin's version)
+            self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+            self.net = ParagraphSelectorNet.from_pretrained(
+                model_path,
+                from_tf=bool(".ckpt" in model_path),
+                config=self.config
+            )  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+        else:
+            self.net = ParagraphSelectorNet()
 
         '''
         self.net = ParagraphSelectorNet(self.config)
