@@ -244,6 +244,16 @@ class ParagraphSelector():
                 loss = criterion(outputs, labels)
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
+
+                #Evaluate on validation set after some iterations
+                '''
+                if step % 10000 == 0: 
+                  eval_loss = evaluate(data,..)
+                  if eval_loss <= best_eval_loss:
+                    best_eval_loss = eval_loss
+                    self.save()
+                    print("Better eval found")
+                '''
                 optimizer.step()
 
         return losses
