@@ -39,6 +39,9 @@ if __name__ == '__main__':
     print(f"Reading data from {cfg('data_abs_path')}...")
     dh = HotPotDataHandler(cfg("data_abs_path"))
     data = dh.data_for_paragraph_selector()
+
+    dev_dh = HotPotDataHandler(cfg("dev_data_abs_path"))
+    dev_data = dev_dh.data_for_paragraph_selector()
     take_time("data loading")
 
     print("Splitting data...")
@@ -50,6 +53,10 @@ if __name__ == '__main__':
     train_data = ParagraphSelector.make_training_data(train_data_raw,
                                                       text_length=cfg("text_length"))
     #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
+
+    dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
+    dev_data = ParagraphSelector.make_training_data(dev_data[:dev_data_limit],
+                                                      text_length=cfg("text_length"))
     take_time("data preparation")
 
 
@@ -59,13 +66,16 @@ if __name__ == '__main__':
 
     print(f"training for {cfg('epochs')} epochs...")
     losses = ps.train(train_data,
+                      dev_data,
+                      model_abs_path,
                       epochs=cfg("epochs"),
                       batch_size=cfg("batch_size"),
-                      learning_rate=cfg("learning_rate"))
+                      learning_rate=cfg("learning_rate"),
+                      eval_interval=cfg("eval_interval"))
     take_time(f"training")
 
-    print(f"Saving model in {model_abs_path}...")
-    ps.save(model_abs_path)
+    # print(f"Saving model in {model_abs_path}...")
+    # ps.save(model_abs_path)
 
     print(f"Saving losses in {losses_abs_path}...")
     with open(losses_abs_path, "w") as f:

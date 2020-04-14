@@ -34,8 +34,36 @@ The paper describes an architecture which is split into 5 modules:
 ### To run the paragraph selector
 python train_ps.py config/train_ps_80-20.cfg paragraph-selector
 
+
 ### Configuration Files
-The class `ConfigReader` in the utils can handle 
+The class `ConfigReader` in the utils module can parse files in raw text format to a number of data types. The general syntax of configuration files (preferably indicated by the extension '.cfg') follows Python syntax. Here are important details:
+ 
+- one parameter per line, containing a name and a value
+    - name and value are separated by at least one white space or tab
+    - names should only contain alphanumeric symbols and '_' (no '-', please!)
+- list-like values are allowed (use Python list syntax)
+    - strings within value lists don't need to be quoted
+    - value lists either with or without quotation (no `["foo", 3, "bar"]` )
+    - mixed lists will exclude non-quoted elements
+- multi-word strings are marked with single or double quotation marks
+- strings containing quotation marks are not tested yet. Be careful!
+- lines starting with `#` are ignored
+- no in-line comments!
+- config files should have the extension 'cfg' (to indicate their purpose)
+
+Suppose there is a file called 'my_config.cfg' which contains a line `batch_size   42`. ConfigReader can be used to access the value 42 like this:
+```python
+from utils import ConfigReader
+file_path = 'my_config.cfg'
+cfg = ConfigReader(file_path)
+my_batch_size = cfg("batch_size")
+```
+
+ConfigReader objects hold the parsed parameters as a dictionary, which allows to access all (or sets of) parameters at once.
+
+Note that there is no control of whether all parameters that are required fro the execution of a program are actually specified in the config file, ansd that ConfigReader returns `None` for parameters that it doesn't hold.
+
+
 
 
 ### Files and Directories

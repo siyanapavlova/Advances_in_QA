@@ -4,14 +4,14 @@ This module implements the Paragraph Selector from the paper, Section 3.1
 
 import pandas as pd
 import torch
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, BertPreTrainedModel, BertConfig
 from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
 import os,sys,inspect
 from tqdm import tqdm
 import argparse
 
-from sklearn.metrics import recall_score, precision_score, f1_score
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
@@ -97,7 +97,7 @@ class ParagraphSelector():
         """
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') if not tokenizer else tokenizer
 
-        class ParagraphSelectorNet(torch.nn.Module):
+        class ParagraphSelectorNet(BertPreTrainedModel):
             """
             A neural network for the paragraph selector.
             """
@@ -132,8 +132,8 @@ class ParagraphSelector():
                 # only the first token (0) (this is the [CLS token]), 
                 # all its dimensions (:) (768 with bert-base-uncased)
 
-                with torch.no_grad(): #TODO de-activate this?
-                    embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :]
+                #with torch.no_grad(): #TODO de-activate this?
+                embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :] #TODO maybe, this throws errors. in this case, look at Stalin's version
 
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
@@ -141,14 +141,26 @@ class ParagraphSelector():
         
         # initialise a paragraph selector net and try to load
         # a trained model from a file, if a file has been specified
-        self.net = ParagraphSelectorNet()
+
+        self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+
+        self.net = ParagraphSelectorNet.from_pretrained(
+            model_path,
+            from_tf=bool(".ckpt" in model_path),
+            config=self.config
+        )  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+
+        '''
+        self.net = ParagraphSelectorNet(self.config)
         if model_path:
             try:
                 self.net.load_state_dict(torch.load(model_path))
             except FileNotFoundError as e:
                 print(e, model_path)
+        '''
 
-    def train(self, train_data, epochs=10, batch_size=1, learning_rate=0.0001):
+    def train(self, train_data, dev_data, model_save_path,
+              epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None):
         """
         Train a ParagraphSelectorNet on a training dataset.
         Binary Cross Entopy is used as the loss function.
@@ -190,12 +202,16 @@ class ParagraphSelector():
         print("Training...")
         
         #TODO: find a way to shuffle reproducibly
-        train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True) 
+        train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True)
 
-        # Iterate over the epochs
+        c = 0  # counter over taining examples
+        best_acc = 0
+        a_model_was_saved_at_some_point = False
+        eval_interval = eval_interval if eval_interval else float('inf')
+
         for epoch in range(epochs):
             print('Epoch %d/%d' % (epoch + 1, epochs))
-            
+
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 inputs, labels = batch
@@ -206,7 +222,23 @@ class ParagraphSelector():
                 loss = criterion(outputs, labels)
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
+
+                c+=1
+                # Evaluate on validation set after some iterations
+                if c % eval_interval == 0:
+                    p, r, f, ids, y_true, y_pred = self.evaluate(dev_data)
+                    accuracy = accuracy_score(y_true, y_pred)
+
+                    if accuracy >= best_acc:
+                        print(f"Better eval found with accuracy {accuracy} (+{accuracy-best_acc})")
+                        best_acc = accuracy
+                        self.net.save(model_save_path)
+                        a_model_was_saved_at_some_point = True
+
                 optimizer.step()
+
+        if not a_model_was_saved_at_some_point: # make sure that there is a model file
+            self.net.save(model_save_path)
 
         return losses
     
