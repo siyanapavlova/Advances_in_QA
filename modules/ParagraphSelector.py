@@ -75,7 +75,7 @@ def make_training_data(data,
 class ParagraphSelector():
     """
     This class implements all that is necessary for training
-    a paragraph selector model (as per the requirement in the 
+    a paragraph selector model (as per the requirements in the 
     paper), predicting relevance scores for paragraph-query pairs
     and building the context for HotPotQA datapoint. Additionally,
     it also allows for saving a trained model, loading a trained 
