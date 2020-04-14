@@ -36,21 +36,24 @@ class FusionBlock(nn.Module):
 
 		self.bidaf = BiDAFNet(hidden_size=300)
 
-		self.g2d_layer = nn.LSTM(2*d2, d2) #TODO add input_dim, output_dim
+		self.g2d_layer = nn.LSTM(2*d2, d2)
 
 
 
 	def forward(self, passes=1):
 		#TODO docstring
 		#TODO impolement the multiple passes here
-		self.entity_embs = self.tok2ent() # (N, 2d2)
-		self.entity_embs = self.entity_embs.unsqueeze(2) # (N, 2d2, 1)
-		updated_entity_embs = self.graph_attention() # (N, d2)
+		for p in range(passes):
+			self.entity_embs = self.tok2ent() # (N, 2d2)
+			self.entity_embs = self.entity_embs.unsqueeze(2) # (N, 2d2, 1)
+			updated_entity_embs = self.graph_attention() # (N, d2)
 
-		# the second one is updated; that's why it's the other way round as in the DFGN paper
-		self.query_emb = self.bidaf(updated_entity_embs, self.query_emb) # (N, d2) formula 9
+			# the second one is updated; that's why it's the other way round as in the DFGN paper
+			self.query_emb = self.bidaf(updated_entity_embs, self.query_emb) # (N, d2) formula 9
 
-		Ct = self.graph2doc(updated_entity_embs)
+			Ct = self.graph2doc(updated_entity_embs) # (M, d2)
+			self.context_emb = Ct # update the context embeddings for the next pass
+			#print(f"pass {p}:\n{Ct}\n")#CLEANUP
 
 		return Ct, self.query_emb
 
@@ -123,9 +126,20 @@ class FusionBlock(nn.Module):
 				pair = torch.cat((h_i, hidden[j])) # (2d2, 1)
 				betas[i][j] = F.leaky_relu(torch.matmul(self.W.T, pair)) # formula 6
 
-			sumex = sum([exp(betas[i][j]) for j in range(N)]) # TODO how to handle cases of betas[i][j]==0?
+				# avoid overflow errors for too big values
+				exes = [] #TODO how to handle overflows? With nan values?
+				for j in range(N):
+					try:
+						exes.append(exp(betas[i][j]))
+					except OverflowError:
+						exes.append(float('inf'))
+				sumex = sum(exes)
+
 			for j in range(N): # compute scores for all node combinations
-				alphas[i][j] =  exp(betas[i][j]) / sumex # formula 7
+				try:
+					alphas[i][j] =  exp(betas[i][j]) / sumex # formula 7
+				except OverflowError:
+					alphas[i][j] = float('inf')/sumex
 
 		""" compute total information received per node """
 		E_t = [] #really N * (d2, 1)?
@@ -147,8 +161,11 @@ class FusionBlock(nn.Module):
 		entity_embs # (N, d2)
 		"""
 
-		emb_info = torch.matmul(self.bin_M, entity_embs) # (M, d2)
-		return self.g2d_layer(torch.cat((self.context_emb, emb_info), dim=-1)) # formula 10
+		emb_info = torch.matmul(self.bin_M, entity_embs).unsqueeze(0) # (1, M, d2)
+		input = torch.cat((self.context_emb.unsqueeze(0), emb_info), dim=-1) # (1, M, 2d2)
+		output, hidden_states = self.g2d_layer(input) # (1, M, d2) # formula 10
+
+		return output.squeeze(0)
 
 
 

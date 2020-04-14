@@ -34,6 +34,9 @@ The paper describes an architecture which is split into 5 modules:
 ### To run the paragraph selector
 python train_ps.py config/train_ps_80-20.cfg paragraph-selector
 
+### Configuration Files
+The class `ConfigReader` in the utils can handle 
+
 
 ### Files and Directories
 
