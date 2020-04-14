@@ -22,9 +22,9 @@ class FusionBlock(nn.Module):
 		"""
 		super(FusionBlock, self).__init__()
 
-		self.context_emb = context_emb # M x d_2
-		self.query_emb = query_emb # L x d_2
-		self.bin_M = graph.M # M x N
+		self.context_emb = context_emb # (M, d_2)
+		self.query_emb = query_emb # (L, d_2)
+		self.bin_M = graph.M # (M, N)
 		self.graph = graph # EntityGraph object
 
 		d2 = self.query_emb.shape[1]
@@ -35,6 +35,8 @@ class FusionBlock(nn.Module):
 		self.W = nn.Parameter(torch.Tensor(2*d2, 1))  # for formula 6
 
 		self.bidaf = BiDAFNet(hidden_size=300)
+
+		self.g2d_layer = nn.LSTM(2*d2, d2) #TODO add input_dim, output_dim
 
 
 
@@ -47,6 +49,10 @@ class FusionBlock(nn.Module):
 
 		# the second one is updated; that's why it's the other way round as in the DFGN paper
 		self.query_emb = self.bidaf(updated_entity_embs, self.query_emb) # (N, d2) formula 9
+
+		Ct = self.graph2doc(updated_entity_embs)
+
+		return Ct, self.query_emb
 
 
 	def tok2ent(self):
@@ -132,12 +138,18 @@ class FusionBlock(nn.Module):
 
 		return torch.stack(E_t).squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
 
-
 	def graph2doc(self, entity_embs):
 		"""
 		#TODO docstring
 		:return:
+		self.context_emb # (M, d2)
+		self.bin_M # (M, N)
+		entity_embs # (N, d2)
 		"""
+
+		emb_info = torch.matmul(self.bin_M, entity_embs) # (M, d2)
+		return self.g2d_layer(torch.cat((self.context_emb, emb_info), dim=-1)) # formula 10
+
 
 
 
