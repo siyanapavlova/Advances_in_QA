@@ -11,20 +11,25 @@ from utils import Linear, BiDAFNet
 
 class FusionBlock(nn.Module):
 	"""
+	This class implements the components of the Fusion Block
+	from the paper (Dodument to Graph Flow, Dynamic Graph Attention
+	and Graph to Document Flow; Updating Query is done using the BiDAF
+	class defined in utils), and puts them together in its forward function.
 	"""
 
 	def __init__(self, context_emb, query_emb, graph):
 		"""
-		#TODO docstring
-		:param context_emb:
-		:param query_emb:
-		:param graph:
+		Initialization function for the FusionBlock class
+
+		:param context_emb: context embedding as obtained from Encoder, (M, d2)
+		:param query_emb: query embdding as obrained from Encoder, (L, d2)
+		:param graph: an entity graph as obrained from EntityGraph
 		"""
 		super(FusionBlock, self).__init__()
 
-		self.context_emb = context_emb # (M, d_2)
-		self.query_emb = query_emb # (L, d_2)
-		self.bin_M = graph.M # (M, N)
+		self.context_emb = context_emb # (M, d2) (context embedding from Encoder)
+		self.query_emb = query_emb # (L, d2)
+		self.bin_M = graph.M # (M, N) (binary matrix from EntityGraph)
 		self.graph = graph # EntityGraph object
 
 		d2 = self.query_emb.shape[1]
@@ -41,8 +46,21 @@ class FusionBlock(nn.Module):
 
 
 	def forward(self, passes=1):
-		#TODO docstring
-		#TODO impolement the multiple passes here
+		"""
+		Forward function of the FusionBlock.
+
+		Performs a number of passes through the fusion block.
+		Uses the tok2ent, graph_attention, bidaf (from utils) and 
+		graph2doc functions to do this.
+		At each pass, we get updated context and query embeddings.
+		The context and query embeddings obtained in the last pass
+		are returned.
+
+		:param passes: number of passes through the FusionBlock,
+					   default is 1, experiments in the paper use 2
+		:return Ct: updated context embedding (M, d2)
+		:return query_emb: updated query embedding (L, d2)
+		"""
 		for p in range(passes):
 			self.entity_embs = self.tok2ent() # (N, 2d2)
 			self.entity_embs = self.entity_embs.unsqueeze(2) # (N, 2d2, 1)
@@ -60,11 +78,12 @@ class FusionBlock(nn.Module):
 
 	def tok2ent(self):
 		"""
-		Document to Graph Flow from the paper (section 3.4)
-		#TODO update docstring
-		:param context_emb: (M, d2) (context embedding from Encoder)
-		:param bin_M: (M, N) (binary matrix from EntityGraph)
-		:return : (N, 2d2)
+		Document to Graph Flow from the paper (section 3.4, paragraph 2)
+
+		Obtain the embedding of the entities from the context embeddings.
+		Both mean-pooling and max-pooling are applied.
+
+		:return entity_emb: (N, 2d2) entity embeddings obtained from context embeddings
 		"""
 		M = self.context_emb.shape[0]
 		N = self.bin_M.shape[1]
@@ -93,8 +112,12 @@ class FusionBlock(nn.Module):
 
 	def graph_attention(self):
 		"""
-		#TODO docstring
-		:return:
+		This implements Dynamic Graph Attention (section 3.4, paragraph 3).
+		Each node of the entity graph propagates information
+		to its neighbors in order to produce updated entity
+		embeddings.
+
+		:return: E_t: (N, d2) updated entity embeddings 
 		"""
 		#TODO avoid for-loops, but first make the method run.
 		#TODO avoid torch.Tensor where possible.
@@ -154,14 +177,17 @@ class FusionBlock(nn.Module):
 
 	def graph2doc(self, entity_embs):
 		"""
-		#TODO docstring
-		:return:
-		self.context_emb # (M, d2)
-		self.bin_M # (M, N)
-		entity_embs # (N, d2)
+		This implements Graph to Document Flow (section 3.4, last paragraph).
+
+		Given the updated entity embeddings, using the same binary matrix
+		as in tok2ent, produce the updated context embeddings.
+
+		:param entity_embs: (N, d2) updated entity embeddings as obteined
+									from graph_attention
+		:return output: (M, d2) updated context embeddings
 		"""
 
-		emb_info = torch.matmul(self.bin_M, entity_embs).unsqueeze(0) # (1, M, d2)
+		emb_info = torch.matmul(self.bin_M, entity_embs).unsqueeze(0) # (M, N) x (N, d2) -> (M, d2) -> (1, M, d2)
 		input = torch.cat((self.context_emb.unsqueeze(0), emb_info), dim=-1) # (1, M, 2d2)
 		output, hidden_states = self.g2d_layer(input) # (1, M, d2) # formula 10
 
