@@ -210,8 +210,9 @@ class ParagraphSelector():
 
         c = 0  # counter over taining examples
         best_acc = 0
-        a_model_was_saved_at_some_point = False
         eval_interval = eval_interval if eval_interval else float('inf')
+        batched_interval = round(eval_interval/batch_size) # number of batches needed to reach eval_interval
+        a_model_was_saved_at_some_point = False
 
         for epoch in range(epochs):
             print('Epoch %d/%d' % (epoch + 1, epochs))
@@ -227,22 +228,22 @@ class ParagraphSelector():
                 loss.backward(retain_graph=True)
                 losses.append(loss.item())
 
-                c+=1
+                c +=1
                 # Evaluate on validation set after some iterations
-                if c % eval_interval == 0:
+                if c % batched_interval == 0:
                     p, r, f, ids, y_true, y_pred = self.evaluate(dev_data)
                     accuracy = accuracy_score(y_true, y_pred)
 
                     if accuracy >= best_acc:
                         print(f"Better eval found with accuracy {accuracy} (+{accuracy-best_acc})")
                         best_acc = accuracy
-                        self.net.save(model_save_path)
+                        self.net.save_pretrained(model_save_path)
                         a_model_was_saved_at_some_point = True
 
                 optimizer.step()
 
         if not a_model_was_saved_at_some_point: # make sure that there is a model file
-            self.net.save(model_save_path)
+            self.net.save_pretrained(model_save_path)
 
         return losses
     
@@ -422,6 +423,7 @@ class ParagraphSelector():
         torch.save(self.net.state_dict(), savepath)
 
 if __name__ == "__main__":
+    #TODO update this to match train_ps.py
     timer = Timer()
 
     parser = argparse.ArgumentParser()

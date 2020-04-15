@@ -177,6 +177,7 @@ class FusionBlock(nn.Module):
 
 	def graph2doc(self, entity_embs):
 		"""
+		#TODO update docstring
 		This implements Graph to Document Flow (section 3.4, last paragraph).
 
 		Given the updated entity embeddings, using the same binary matrix
@@ -187,6 +188,7 @@ class FusionBlock(nn.Module):
 		:return output: (M, d2) updated context embeddings
 		"""
 
+		# unsqueeze to represent the batch
 		emb_info = torch.matmul(self.bin_M, entity_embs).unsqueeze(0) # (M, N) x (N, d2) -> (M, d2) -> (1, M, d2)
 		input = torch.cat((self.context_emb.unsqueeze(0), emb_info), dim=-1) # (1, M, 2d2)
 		output, hidden_states = self.g2d_layer(input) # (1, M, d2) # formula 10

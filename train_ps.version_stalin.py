@@ -46,26 +46,26 @@ if __name__ == '__main__':
     #else:
 
     try:
-     with open("data/train_data.pickled","rb") as f:
-        train_data = pickle.load(f)
+        with open("data/train_data.pickled","rb") as f:
+            train_data = pickle.load(f)
     except:
-     print(f"Reading data from {cfg('data_abs_path')}...")
-     dh = HotPotDataHandler(cfg("data_abs_path"))
-     data = dh.data_for_paragraph_selector()
-     take_time("data loading")
- 
-     print("Splitting data...")
-     data_limit = cfg("dataset_size") if cfg("dataset_size") else len(data)
-     train_data_raw, test_data_raw = train_test_split(data[:data_limit],
-                                                     test_size=cfg('test_split'),
-                                                     random_state=cfg('shuffle_seed'),
-                                                     shuffle=True)
-     train_data = ParagraphSelector.make_training_data(train_data_raw,
-                                                      text_length=cfg("text_length"))
-     with open("data/train_data.pickled","wb") as f:
-        pickle.dump(train_data,f)
+        print(f"Reading data from {cfg('data_abs_path')}...")
+        dh = HotPotDataHandler(cfg("data_abs_path"))
+        data = dh.data_for_paragraph_selector()
+        take_time("data loading")
 
-    #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
+        print("Splitting data...")
+        data_limit = cfg("dataset_size") if cfg("dataset_size") else len(data)
+        train_data_raw, test_data_raw = train_test_split(data[:data_limit],
+                                                         test_size=cfg('test_split'),
+                                                         random_state=cfg('shuffle_seed'),
+                                                         shuffle=True)
+        train_data = ParagraphSelector.make_training_data(train_data_raw,
+                                                         text_length=cfg("text_length"))
+        with open("data/train_data.pickled","wb") as f:
+            pickle.dump(train_data,f)
+
+        #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
     take_time("data preparation")
 
 

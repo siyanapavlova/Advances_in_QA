@@ -10,14 +10,13 @@ from utils import BiDAFNet
 class Predictor(nn.Module):
     #TODO docstring
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, embedding_size):
     	"""
     	TODO: update docstring
 
     	Initialise parameters and layers for Predictor.
 
-    	:param input_size:
-    	:param output_size:
+    	:param embedding_size:
         """
         super(Predictor, self).__init__() # the following build on this
 
@@ -30,7 +29,7 @@ class Predictor(nn.Module):
 
         1. Where does 2*d_2 come from (authors' code, line 365, 368, etc.)
         2. How are the embeddings concatenated for the linear layer (by row or column?)? 
-            -> along the first dimension (below each other)
+            -> along d2, probably
         3. Why do they use a linear layer for 'support' as well when there's none in the Yang paper
         4. What about self attention?
         5. Where do the coefficients come from? Where are they defined and why? (lambdas in formula 15)
@@ -41,30 +40,46 @@ class Predictor(nn.Module):
         9. How do you detect the start mask from the query?
         """
 
-        self.f0 = nn.LSTM(,)
-        self.f1 = nn.LSTM(,)
-        self.f2 = nn.LSTM(,)
-        self.f3 = nn.LSTM(,)
-        self.linear_start = nn.Linear(, 1)
-        self.linear_end = nn.Linear(, 1)
-        self.linear_type = nn.Linear(, 3) # 3 because we have 3 types - yes, no, and span
+        d2 = embedding_size
+
+        self.f0 = nn.LSTM(d2, d2) # input_site, output_size
+        self.f1 = nn.LSTM(2*d2, d2)
+        self.f2 = nn.LSTM(3*d2, d2)
+        self.f3 = nn.LSTM(3*d2, d2)
+        self.linear_start = nn.Linear(d2, 1)
+        self.linear_end = nn.Linear(d2, 1)
+        self.linear_type = nn.Linear(d2, 3) # 3 because we have 3 types - yes, no, and span
 
 
     def forward(self, context_emb):
+        """
+        TODO dosctring
+
+        :param context_emb: embedding on the context as produced by the FusionBlock
+        """
+
+        Ct = context_emb.unsqueeze(0) # (1, M, d2)
+
+    	o_sup, hidden_o_sup = self.f0(Ct) 									   # (1, M, d_2) -> (1, M, d_2)
+
+    	o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
+    	start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) # TODO make sure that the batch axis doesn't make trouble
+
+    	o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
+    	end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1)
+
+    	o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
+    	a_type_scores = self.linear_type(o_type) 							   # (1, M, d_2) -> (1, M, 3)
+
+
+
+
+
     """
-    TODO dosctring
-    
-    :param context_emb: embedding on the context as produced by the FusionBlock
+    For each of the o_ outputs, we need a tensor of labels in order to compute the loss. 
+    This means:
+    - o_sup: 
+    - o_start:
+    - o_end:
+    - o_type:
     """
-    	o_sup = self.f0(context_emb) 									# (M, d_2) -> (M, d_2)
-
-    	o_start = self.f1(torch.cat((context_emb, o_sup), dim=-1))  	# (M, 2*d_2) -> (M, d_2)
-    	start_token = self.linear_start(o_start) 						# (M, d_2) -> 1
-
-    	o_end = self.f2(torch.cat((context_emb, o_sup, o_start), dim=-1)) # (M, 3*d_2) -> (M, d_2)
-    	end_token = self.linear_end(o_end) 								# (M, d_2) -> 1
-
-    	o_type = self.f3(torch.cat((context_emb, o_sup, o_end), dim=-1))# (M, 3*d_2) -> (M, d_2)
-    	a_type = self.linear_type(o_type) 								# (M, d_2) -> 3
-
-
