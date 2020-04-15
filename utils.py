@@ -296,7 +296,8 @@ class HotPotDataHandler():
             result.append(tuple((point["_id"],
                                  supp_facts,
                                  point["question"],
-                                 point["context"])))
+                                 point["context"],
+                                 point["answer"])))
         return result
 
 class PredictorLabelHandler():
@@ -307,6 +308,21 @@ class PredictorLabelHandler():
     def make_labeled_data(self):
 
         return
+
+
+    """
+    For each of the o_ outputs, we need a tensor of labels in order to compute the loss. 
+    This means:
+    - o_sup: look at the supporting facts and graph.context: 
+        if the paragraph title is in supporting facts, fill graph.tokens with 1s for 
+        the corresponding tokens (might need to use a counter)
+    - o_type: look at the answers. Each column of the label tensor is one answer type:
+        'yes' is column 0, 'no' is column 1, anything else is column 2
+    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
+        take graph.tokens and look for each token:
+        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
+        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
+    """
 
 
 
