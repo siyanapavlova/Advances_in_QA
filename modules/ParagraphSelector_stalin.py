@@ -162,15 +162,13 @@ class ParagraphSelector():
         # if model_path is not 'bert-base-uncased' or any other predefined models
         # it will try to load the pytorch.bin from the model_path directory
 
-        self.config = BertConfig.from_pretrained(
-        model_path
-        ) #, cache_dir=args.cache_dir if args.cache_dir else None,)
+        self.config = BertConfig.from_pretrained(model_path) #, cache_dir=args.cache_dir if args.cache_dir else None,)
 
         self.net = ParagraphSelectorNet.from_pretrained(
-        model_path,
-        from_tf=bool(".ckpt" in model_path),
-        config=self.config
-        ) #, cache_dir=args.cache_dir if args.cache_dir else None,)
+            model_path,
+            from_tf=bool(".ckpt" in model_path),
+            config=self.config
+            ) #, cache_dir=args.cache_dir if args.cache_dir else None,)
 
         #self.net = ParagraphSelectorNet(self.config)
         '''

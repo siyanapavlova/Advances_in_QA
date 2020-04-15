@@ -83,10 +83,11 @@ class ParagraphSelector():
     """
     
     def __init__(self,
-                 model_path=None,
+                 model_path,
                  tokenizer=None,
                  encoder_model=None):
         """
+        #TODO update the docstring
         Initialization function for the ParagraphSelector class
 
         :param model_path: path to an already trained model (only
@@ -101,21 +102,24 @@ class ParagraphSelector():
             """
             A neural network for the paragraph selector.
             """
-            def __init__(self, input_size=768, output_size=1):
+            def __init__(self, config):#, input_size=768, output_size=1):
                 """
+                #TODO update the docstring
                 Initialization of the encoder model and a linear layer
 
                 :param intput_size: input size for the linear layer
                 :param output_size: output size of the linear layer
                 """
-                super(ParagraphSelectorNet, self).__init__()
-                self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
-                                                               output_hidden_states=True,
-                                                               output_attentions=True) if not encoder_model else encoder_model
-                self.linear  = torch.nn.Linear(input_size, output_size)
+                super(ParagraphSelectorNet, self).__init__(config)
+                self.bert = BertModel(config)#('bert-base-uncased',
+                                                               #output_hidden_states=True,
+                                                               #output_attentions=True) if not encoder_model else encoder_model
+                self.linear = torch.nn.Linear(config.hidden_size, 1)
+                self.init_weights()
 
             def forward(self, token_ids):
                 """
+                #TODO update the docstring
                 Forward function of the ParagraphSelectorNet.
                 Takes in token_ids corresponding to a query+paragraph
                 and returns a relevance score (between 0 and 1) for
@@ -133,23 +137,22 @@ class ParagraphSelector():
                 # all its dimensions (:) (768 with bert-base-uncased)
 
                 #with torch.no_grad(): #TODO de-activate this?
-                embedding = self.encoder_model(token_ids)[-2][-1][:, 0, :] #TODO maybe, this throws errors. in this case, look at Stalin's version
+                #embedding = self.bert(token_ids)[-2][-1][:, 0, :] #TODO maybe, this throws errors. in this case, look at Stalin's version below
+
+                outputs = self.bert(token_ids)
+                embedding = outputs[0][:, 0, :]
 
                 output = self.linear(embedding)
                 output = torch.sigmoid(output)
-                return output 
+                return output
         
         # initialise a paragraph selector net and try to load
-        # a trained model from a file, if a file has been specified
-        if model_path: #TODO use this (partly taken from Stalin's version)
-            self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
-            self.net = ParagraphSelectorNet.from_pretrained(
-                model_path,
-                from_tf=bool(".ckpt" in model_path),
-                config=self.config
-            )  # , cache_dir=args.cache_dir if args.cache_dir else None,)
-        else:
-            self.net = ParagraphSelectorNet()
+
+
+        self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
+        self.net = ParagraphSelectorNet.from_pretrained(model_path,
+                                                        from_tf=bool(".ckpt" in model_path),
+                                                        config=self.config)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
 
         '''
         self.net = ParagraphSelectorNet(self.config)
