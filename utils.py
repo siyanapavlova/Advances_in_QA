@@ -283,12 +283,13 @@ class HotPotDataHandler():
     def data_for_paragraph_selector(self):
         """
         #TODO docstring
-        Returns a list of tuples (question_id, supporting_facts, query, paragraphs),
+        Returns a list of tuples (question_id, supporting_facts, query, paragraphs, answer),
         where supporting_facts is a list of strings,
         query is a string,
         paragraphs is a 10-element list where
             the first element is a string
-            the second element is a list of sentences (i.e., a list of strings)
+            the second element is a list of sentences (i.e., a list of strings),
+        answer is a string
         """
         result = []
         for point in self.data:
@@ -300,14 +301,89 @@ class HotPotDataHandler():
                                  point["answer"])))
         return result
 
-class PredictorLabelHandler():
 
-    def __init__(self, ):
-        pass
 
-    def make_labeled_data(self):
+def make_labeled_data_for_predictor(graph, raw_point):
+    """
+    TODO update docstring
+    Prepare labeled data for the Predictor.
 
-        return
+    From the graph we get:
+        - a list of tokens
+        - the context (titles + sentences)
+    From the raw_point we get:
+        - supporting facts
+        - answer
+
+    :param graph:
+    :param raw_point:
+    :return : 
+    """
+    M = len(graph.tokens)
+
+    sup_labels = torch.zeros(M)
+    start_labels = torch.zeros(M)
+    end_labels = torch.zeros(M)
+    type_labels = torch.zeros(3)
+
+    type_labels[0] = raw_point["answer"] == "yes"
+    type_labels[1] = raw_point["answer"] == "no"
+    type_labels[2] = raw_point["answer"] != "yes" and raw_point["answer"] != "no"
+
+    if type_labels[2]:
+        for i, token in enumerate(graph.tokens):
+            if raw_point["answer"].startswith(token):
+                start_labels[i] = 1
+            if raw_point["answer"].endswith(token):
+                end_labels[i] = 1
+
+    # TODO finish this!!!!
+    # for i, para in enumerate(graph.context):
+
+    """
+    Map each entity onto their character span at the scope of the whole
+    context. This assumes that each sentence/paragraph is separated with
+    one whitespace character.
+    :return: dict{paragraphID:(start_pos,end_pos)}
+    """
+    abs_spans = {} # {paragraph_ID:(abs_start,abs_end)}
+    list_context = [[p[0]] + p[1] for p in context]  # squeeze header into the paragraph
+    
+    cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
+    prev_sentnum = 0
+
+    for i, t in enumerate(graph.tokens):  # iterate from beginning to end
+
+
+        if t.startswith("##"): # append the wordpiece to the previous token
+            accumulated_string += t.strip("#") # add the current token, but without '##'
+            acc_count += 1
+        else: # nothing special happens.
+            accumulated_string = t
+            acc_count = 1
+
+
+
+        # para, sent, rel_start, rel_end = self.graph[id]['address']
+        if sent != prev_sentnum:  # we have a new sentence!
+            # increase accumulated position by sent length plus a space
+            cum_pos += len(list_context[para][prev_sentnum]) + 1
+
+        abs_start = rel_start + cum_pos
+        abs_end = rel_end + cum_pos
+        abs_spans[id] = (abs_start, abs_end)
+
+        prev_sentnum = sent
+
+    # add the information to the graph nodes
+    for id, (start, end) in abs_spans.items():
+        self.graph[id].update({"context_span": (start, end)})
+
+    for i, para in enumerate(graph.context):
+        if para[0] in raw_point["supporting_facts"]:
+
+
+    return
 
 
     """

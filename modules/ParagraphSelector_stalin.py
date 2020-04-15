@@ -314,7 +314,7 @@ class ParagraphSelector():
         self.net = self.net.to(device)
 
         for point in tqdm(data, desc="Datapoints"):
-            context = self.make_context(point,
+            _, context = self.make_context(point,
                                         threshold=threshold,
                                         pad_token_id=pad_token_id,
                                         text_length=text_length,
@@ -418,7 +418,7 @@ class ParagraphSelector():
             if score > threshold:
                 context.append(p)
 
-        return context
+        return datapoint[0], context
 
     def save(self, savepath):
         '''
