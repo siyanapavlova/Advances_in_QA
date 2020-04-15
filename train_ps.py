@@ -29,30 +29,39 @@ if __name__ == '__main__':
 
     cfg = ConfigReader(args.config_file)
 
-    model_abs_path = cfg('model_abs_dir') + args.model_name
-    model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
+    model_abs_path = cfg('model_abs_dir') #+ args.model_name
+    #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
     losses_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".losses"
     traintime_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".times"
+
     take_time("parameter input")
 
 
     #========== DATA PREPARATION
+
+
+
     try:
         with open(cfg("pickled_train_data"), "rb") as f:
             train_data = pickle.load(f)
+            data_limit = cfg("dataset_size") if cfg("dataset_size") else len(train_data)
         with open(cfg("pickled_dev_data"), "rb") as f:
             dev_data = pickle.load(f)
+            dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
+
+
     except:
         print(f"Reading data from {cfg('data_abs_path')}...")
         dh = HotPotDataHandler(cfg("data_abs_path"))
         data = dh.data_for_paragraph_selector()
+        data_limit = cfg("dataset_size") if cfg("dataset_size") else len(data)
 
         dev_dh = HotPotDataHandler(cfg("dev_data_abs_path"))
         dev_data = dev_dh.data_for_paragraph_selector()
+        dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
         take_time("data loading")
 
         print("Splitting data...")
-        data_limit = cfg("dataset_size") if cfg("dataset_size") else len(data)
         train_data_raw, test_data_raw = train_test_split(data[:data_limit],
                                                          test_size=cfg('test_split'),
                                                          random_state=cfg('shuffle_seed'),
@@ -60,14 +69,14 @@ if __name__ == '__main__':
         train_data = ParagraphSelector.make_training_data(train_data_raw,
                                                           text_length=cfg("text_length"))
         #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
+
         with open(cfg("pickled_train_data"), "wb") as f:
             pickle.dump(train_data, f)
 
-        dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
-        dev_data = ParagraphSelector.make_training_data(dev_data[:dev_data_limit],
-                                                          text_length=cfg("text_length"))
         with open(cfg("pickled_dev_data"), "wb") as f:
             pickle.dump(dev_data, f)
+
+
 
     take_time("data preparation")
 
@@ -78,7 +87,7 @@ if __name__ == '__main__':
 
     print(f"training for {cfg('epochs')} epochs...")
     losses = ps.train(train_data,
-                      dev_data,
+                      dev_data[:dev_data_limit],
                       model_abs_path,
                       epochs=cfg("epochs"),
                       batch_size=cfg("batch_size"),

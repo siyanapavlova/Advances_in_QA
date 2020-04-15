@@ -9,3 +9,7 @@ models/
 __pycache__
 
 .ipynb_checkpoints
+
+
+
+/config/local_train_ps.cfg

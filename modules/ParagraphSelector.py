@@ -234,8 +234,8 @@ class ParagraphSelector():
                     p, r, f, ids, y_true, y_pred = self.evaluate(dev_data)
                     accuracy = accuracy_score(y_true, y_pred)
 
-                    if accuracy >= best_acc:
-                        print(f"Better eval found with accuracy {accuracy} (+{accuracy-best_acc})")
+                    if accuracy > best_acc:
+                        print(f"Better eval found with accuracy {round(accuracy ,3)} (+{round(accuracy-best_acc, 3)})")
                         best_acc = accuracy
                         self.net.save_pretrained(model_save_path)
                         a_model_was_saved_at_some_point = True
@@ -302,7 +302,7 @@ class ParagraphSelector():
             else torch.device('cpu')
         self.net = self.net.to(device)
 
-        for point in tqdm(data, desc="Datapoints"):
+        for point in tqdm(data, desc="eval points"):
             context = self.make_context(point,
                                         threshold=threshold,
                                         pad_token_id=pad_token_id,
