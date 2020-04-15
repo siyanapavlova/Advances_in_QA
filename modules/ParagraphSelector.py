@@ -231,14 +231,15 @@ class ParagraphSelector():
                 c +=1
                 # Evaluate on validation set after some iterations
                 if c % batched_interval == 0:
-                    p, r, f, ids, y_true, y_pred = self.evaluate(dev_data)
-                    accuracy = accuracy_score(y_true, y_pred)
+                    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data)
 
                     if accuracy > best_acc:
                         print(f"Better eval found with accuracy {round(accuracy ,3)} (+{round(accuracy-best_acc, 3)})")
                         best_acc = accuracy
                         self.net.save_pretrained(model_save_path)
                         a_model_was_saved_at_some_point = True
+                    else:
+                        print(f"No improvement yet...")
 
                 optimizer.step()
 
@@ -324,8 +325,9 @@ class ParagraphSelector():
         precision = precision_score(all_true_flattened, all_pred_flattened)
         recall = recall_score(all_true_flattened, all_pred_flattened)
         f1 = f1_score(all_true_flattened, all_pred_flattened)
+        acc = accuracy_score(all_true_flattened, all_pred_flattened)
         
-        return precision, recall, f1, ids, all_true, all_pred
+        return precision, recall, f1, acc, ids, all_true, all_pred
     
     def predict(self, p, device=torch.device('cpu')):
         """

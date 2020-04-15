@@ -299,6 +299,18 @@ class HotPotDataHandler():
                                  point["context"])))
         return result
 
+class PredictorLabelHandler():
+
+    def __init__(self, ):
+        pass
+
+    def make_labeled_data(self):
+
+        return
+
+
+
+
 class Linear(nn.Module):
     '''
     Linear class for the BiDAF network.
