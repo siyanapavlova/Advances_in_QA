@@ -317,7 +317,10 @@ def make_labeled_data_for_predictor(graph, raw_point):
 
     :param graph:
     :param raw_point:
-    :return : 
+    :return sup_labels:
+    :return start_labels:
+    :return end_labels:
+    :return type_labels: 
     """
     M = len(graph.tokens)
 
@@ -326,10 +329,12 @@ def make_labeled_data_for_predictor(graph, raw_point):
     end_labels = torch.zeros(M)
     type_labels = torch.zeros(3)
 
+    # get answer type
     type_labels[0] = raw_point["answer"] == "yes"
     type_labels[1] = raw_point["answer"] == "no"
     type_labels[2] = raw_point["answer"] != "yes" and raw_point["answer"] != "no"
 
+    # if the answer is not "yes" or "no", get its span
     if type_labels[2]:
         for i, token in enumerate(graph.tokens):
             if raw_point["answer"].startswith(token):
@@ -337,53 +342,37 @@ def make_labeled_data_for_predictor(graph, raw_point):
             if raw_point["answer"].endswith(token):
                 end_labels[i] = 1
 
-    # TODO finish this!!!!
-    # for i, para in enumerate(graph.context):
-
-    """
-    Map each entity onto their character span at the scope of the whole
-    context. This assumes that each sentence/paragraph is separated with
-    one whitespace character.
-    :return: dict{paragraphID:(start_pos,end_pos)}
-    """
-    abs_spans = {} # {paragraph_ID:(abs_start,abs_end)}
+    # get supporting facts (paragraphs)
+    spans = {} # {paragraph_ID:(abs_start,abs_end)}
     list_context = [[p[0]] + p[1] for p in context]  # squeeze header into the paragraph
+    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings
     
     cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
-    prev_sentnum = 0
+    curr_paranum = 0
+    prev_end = -1 # So that that first sentence gets starts at token 0
+
+    accumulated_string = ""
 
     for i, t in enumerate(graph.tokens):  # iterate from beginning to end
-
-
         if t.startswith("##"): # append the wordpiece to the previous token
             accumulated_string += t.strip("#") # add the current token, but without '##'
-            acc_count += 1
         else: # nothing special happens.
             accumulated_string = t
-            acc_count = 1
 
-
-
-        # para, sent, rel_start, rel_end = self.graph[id]['address']
-        if sent != prev_sentnum:  # we have a new sentence!
-            # increase accumulated position by sent length plus a space
-            cum_pos += len(list_context[para][prev_sentnum]) + 1
-
-        abs_start = rel_start + cum_pos
-        abs_end = rel_end + cum_pos
-        abs_spans[id] = (abs_start, abs_end)
-
-        prev_sentnum = sent
-
-    # add the information to the graph nodes
-    for id, (start, end) in abs_spans.items():
-        self.graph[id].update({"context_span": (start, end)})
+        # if accumulated_string == current paragraph
+        # save paragraph span and move to next paragraph
+        if string_paragraphs[curr_paranum] == accumulated_string:
+            spans[curr_paranum] = (prev_end + 1, i)
+            accumulated_string = ""
+            prev_end = i + 1
+            curr_paranum += 1
 
     for i, para in enumerate(graph.context):
         if para[0] in raw_point["supporting_facts"]:
+            # make tokens within the span of the paragraph ones
+            sup_labels[ spans[i][0] : spans[i][1] + 1 ] = 1
 
-
-    return
+    return sup_labels, start_labels, end_labels, type_labels
 
 
     """

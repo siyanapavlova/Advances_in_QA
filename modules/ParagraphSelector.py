@@ -363,7 +363,7 @@ class ParagraphSelector():
         specific value (threshold) to the query of that datapoint.
          
         :param datapoint: datapoint for which to make context
-                          shape: (question_id, supporting_facts, query, paragraphs),
+                          shape: (question_id, supporting_facts, query, paragraphs, answer),
                                 where question_id is a string corresponding
                                       to the datapoint id in HotPotQA
                                 supporting_facts is a list of strings,
