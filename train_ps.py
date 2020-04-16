@@ -34,6 +34,19 @@ if __name__ == '__main__':
     losses_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".losses"
     traintime_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".times"
 
+    # check all relevant file paths before starting training
+    for filepath in [cfg("data_abs_path"),
+                     cfg("dev_data_abs_path"),
+                     model_abs_path,
+                     losses_abs_path,
+                     traintime_abs_path]:
+        try:
+            f = open(filepath, "r")
+            f.close()
+        except FileNotFoundError as e:
+            print(e)
+            sys.exit()
+
     take_time("parameter input")
 
 
@@ -82,7 +95,7 @@ if __name__ == '__main__':
 
 
     #========== TRAINING
-    print("Initilising ParagraphSelector...")
+    print("Initialising ParagraphSelector...")
     ps = ParagraphSelector.ParagraphSelector(cfg("bert_model_path"))
 
     print(f"training for {cfg('epochs')} epochs...")
