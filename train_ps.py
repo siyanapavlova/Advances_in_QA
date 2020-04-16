@@ -30,26 +30,23 @@ if __name__ == '__main__':
 
     cfg = ConfigReader(args.config_file)
 
-    model_abs_path = cfg('model_abs_dir') + args.model_name
+    model_abs_path = cfg('model_abs_dir') + args.model_name + "/"
     #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
-    losses_abs_path = model_abs_path + ".losses"
-    traintime_abs_path = model_abs_path + ".times"
+    losses_abs_path = model_abs_path + args.model_name + ".losses"
+    traintime_abs_path = model_abs_path + args.model_name + ".times"
 
-    # check all relevant file paths before starting training
-    for filepath in [cfg("data_abs_path"),
-                     cfg("dev_data_abs_path"),
-                     model_abs_path,
-                     losses_abs_path,
-                     traintime_abs_path]:
+    # check all relevant file paths and directories before starting training
+    for path in [cfg("data_abs_path"), cfg("dev_data_abs_path")]:
         try:
-            f = open(filepath, "r")
+            f = open(path, "r")
             f.close()
         except FileNotFoundError as e:
-            if os.path.isdir(filepath) and not os.path.exists(filepath):
-                os.makedirs(filepath)
-            else:
-                print(e)
-                sys.exit()
+            print(e)
+            sys.exit()
+    for path in [model_abs_path]:
+        if not os.path.exists(path):
+            print(f"newly creating {path}")
+            os.makedirs(path)
 
     take_time("parameter input")
 
