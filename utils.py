@@ -15,7 +15,8 @@ from torch import nn
 import torch
 from torch import functional as F
 from torch.nn import functional as nnF
-
+import string
+import difflib
 
 def loop_input(rtype=str, default=None, msg=""):
     """
@@ -329,43 +330,52 @@ def make_labeled_data_for_predictor(graph, raw_point):
     end_labels = torch.zeros(M)
     type_labels = torch.zeros(3)
 
+    answer = raw_point["answer"].lower()
+
     # get answer type
-    type_labels[0] = raw_point["answer"] == "yes"
-    type_labels[1] = raw_point["answer"] == "no"
-    type_labels[2] = raw_point["answer"] != "yes" and raw_point["answer"] != "no"
+    type_labels[0] = answer == "yes"
+    type_labels[1] = answer == "no"
+    type_labels[2] = answer != "yes" and answer != "no"
 
     # if the answer is not "yes" or "no", get its span
     if type_labels[2]:
         for i, token in enumerate(graph.tokens):
-            if raw_point["answer"].startswith(token):
+            if answer.startswith(token):
                 start_labels[i] = 1
-            if raw_point["answer"].endswith(token):
+            if answer.endswith(token):
                 end_labels[i] = 1
 
     # get supporting facts (paragraphs)
-    spans = {} # {paragraph_ID:(abs_start,abs_end)}
-    list_context = [[p[0]] + p[1] for p in context]  # squeeze header into the paragraph
-    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings
+    # spans shape: {paragraph_ID:(abs_start,abs_end)}
+    # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
+    spans = {}
+    list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
+    string_paragraphs = ["".join(p).lower() for p in list_context] # make context into a list of strings
+
+    print(f"string_paragraphs: {string_paragraphs}")
     
     cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
     curr_paranum = 0
-    prev_end = -1 # So that that first sentence gets starts at token 0
+    curr_start = 0
 
     accumulated_string = ""
 
     for i, t in enumerate(graph.tokens):  # iterate from beginning to end
         if t.startswith("##"): # append the wordpiece to the previous token
             accumulated_string += t.strip("#") # add the current token, but without '##'
+        elif t in string.punctuation:
+            accumulated_string += t
         else: # nothing special happens.
-            accumulated_string = t
+            accumulated_string += " " + t
 
         # if accumulated_string == current paragraph
         # save paragraph span and move to next paragraph
-        if string_paragraphs[curr_paranum] == accumulated_string:
-            spans[curr_paranum] = (prev_end + 1, i)
+        if string_paragraphs[curr_paranum].strip() == accumulated_string.strip():
+            spans[curr_paranum] = (curr_start, i)
             accumulated_string = ""
-            prev_end = i + 1
+            curr_start = i + 1
             curr_paranum += 1
+    print(f"spans: {spans}")
 
     for i, para in enumerate(graph.context):
         if para[0] in raw_point["supporting_facts"]:
