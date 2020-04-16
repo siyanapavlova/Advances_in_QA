@@ -10,6 +10,7 @@ from modules import ParagraphSelector
 
 import argparse
 import sys
+import os
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 import pickle
@@ -29,10 +30,26 @@ if __name__ == '__main__':
 
     cfg = ConfigReader(args.config_file)
 
-    model_abs_path = cfg('model_abs_dir') #+ args.model_name
+    model_abs_path = cfg('model_abs_dir') + args.model_name
     #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
-    losses_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".losses"
-    traintime_abs_path = cfg("model_abs_dir") + "performance/" + args.model_name + ".times"
+    losses_abs_path = model_abs_path + ".losses"
+    traintime_abs_path = model_abs_path + ".times"
+
+    # check all relevant file paths before starting training
+    for filepath in [cfg("data_abs_path"),
+                     cfg("dev_data_abs_path"),
+                     model_abs_path,
+                     losses_abs_path,
+                     traintime_abs_path]:
+        try:
+            f = open(filepath, "r")
+            f.close()
+        except FileNotFoundError as e:
+            if os.path.isdir(filepath) and not os.path.exists(filepath):
+                os.makedirs(filepath)
+            else:
+                print(e)
+                sys.exit()
 
     take_time("parameter input")
 
@@ -82,7 +99,7 @@ if __name__ == '__main__':
 
 
     #========== TRAINING
-    print("Initilising ParagraphSelector...")
+    print("Initialising ParagraphSelector...")
     ps = ParagraphSelector.ParagraphSelector(cfg("bert_model_path"))
 
     print(f"training for {cfg('epochs')} epochs...")
