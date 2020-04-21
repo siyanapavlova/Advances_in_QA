@@ -116,7 +116,15 @@ class ConfigReader():
         if not paramnames: # return the whole config
             return self.params
         else: # return specified values
-            values = [self.params[n] if n in self.params else None for n in paramnames]
+            values = []
+            for n in paramnames:
+                if n in self.params:
+                    values.append(self.params[n])
+                else:
+                    print(f"WARNING: couldn't find parameter {n}.")
+                    print(f"   Make sure to include it in {self.filepath}")
+                    print(f"   Continuing with value {None} for {n}")
+                    values.append(None)
             return values[0] if len(values) == 1 else values
 
     def read_config(self):
@@ -316,6 +324,19 @@ def make_labeled_data_for_predictor(graph, raw_point):
         - supporting facts
         - answer
 
+    Original description:
+    For each of the o_ outputs, we need a tensor of labels in order to compute the loss.
+    This means:
+    - o_sup: look at the supporting facts and graph.context:
+        if the paragraph title is in supporting facts, fill graph.tokens with 1s for
+        the corresponding tokens (might need to use a counter)
+    - o_type: look at the answers. Each column of the label tensor is one answer type:
+        'yes' is column 0, 'no' is column 1, anything else is column 2
+    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
+        take graph.tokens and look for each token:
+        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
+        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
+
     :param graph:
     :param raw_point:
     :return sup_labels:
@@ -385,19 +406,7 @@ def make_labeled_data_for_predictor(graph, raw_point):
     return sup_labels, start_labels, end_labels, type_labels
 
 
-    """
-    For each of the o_ outputs, we need a tensor of labels in order to compute the loss. 
-    This means:
-    - o_sup: look at the supporting facts and graph.context: 
-        if the paragraph title is in supporting facts, fill graph.tokens with 1s for 
-        the corresponding tokens (might need to use a counter)
-    - o_type: look at the answers. Each column of the label tensor is one answer type:
-        'yes' is column 0, 'no' is column 1, anything else is column 2
-    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
-        take graph.tokens and look for each token:
-        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
-        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
-    """
+
 
 
 

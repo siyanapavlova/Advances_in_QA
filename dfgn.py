@@ -1,6 +1,7 @@
 """
 This script puts together all modules.
 """
+#TODO CLEANUP this file? It's like main.py, but in old.
 
 import utils
 from modules.ParagraphSelector import ParagraphSelector
@@ -39,7 +40,7 @@ for datapoint in data:
 
     """ Encoder """
     # q = query, c = context
-    q_encoded, c_encoded = enc.encode(query, context) #TODO does this call the encoder correctly?
+    q_encoded, c_encoded = enc.token_ids(query, context) #TODO does this call the encoder correctly?
 
     """ Fusion Block """
     M = graph.M

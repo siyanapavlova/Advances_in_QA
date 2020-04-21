@@ -127,7 +127,7 @@ class Encoder():
         
         len_query = len(tokenized_query)
         
-        input_ids = torch.tensor([self.tokenizer.encode(concatenated, add_special_tokens=False)])
+        input_ids = torch.tensor([self.tokenizer.token_ids(concatenated, add_special_tokens=False)])
         all_hidden_states, all_attentions = self.encoder_model(input_ids)[-2:]
 
         # This is the embedding of the context + query

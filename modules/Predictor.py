@@ -6,16 +6,19 @@ import torch
 import torch.nn as nn
 from utils import BiDAFNet
 
+from utils import make_labeled_data_for_predictor
+
 
 class Predictor(nn.Module):
     #TODO docstring
 
-    def __init__(self, embedding_size):
+    def __init__(self, context_length, embedding_size):
     	"""
     	TODO: update docstring
 
     	Initialise parameters and layers for Predictor.
 
+        :param context_length
     	:param embedding_size:
         """
         super(Predictor, self).__init__() # the following build on this
@@ -41,14 +44,16 @@ class Predictor(nn.Module):
         """
 
         d2 = embedding_size
+        M = context_length
 
         self.f0 = nn.LSTM(d2, d2) # input_site, output_size
         self.f1 = nn.LSTM(2*d2, d2)
         self.f2 = nn.LSTM(3*d2, d2)
         self.f3 = nn.LSTM(3*d2, d2)
+        self.linear_sup = nn.Linear(d2, 1) # this is not in the original paper(s)
         self.linear_start = nn.Linear(d2, 1)
         self.linear_end = nn.Linear(d2, 1)
-        self.linear_type = nn.Linear(d2, 3) # 3 because we have 3 types - yes, no, and span
+        self.linear_type = nn.Linear(M*d2, 3) # 3 because we have 3 types - yes, no, and span
 
 
     def forward(self, context_emb):
@@ -60,7 +65,8 @@ class Predictor(nn.Module):
 
         Ct = context_emb.unsqueeze(0) # (1, M, d2)
 
-    	o_sup, hidden_o_sup = self.f0(Ct) 									   # (1, M, d_2) -> (1, M, d_2)
+    	o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
+        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 1)
 
     	o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
     	start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) # TODO make sure that the batch axis doesn't make trouble
@@ -69,22 +75,11 @@ class Predictor(nn.Module):
     	end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1)
 
     	o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-    	a_type_scores = self.linear_type(o_type) 							   # (1, M, d_2) -> (1, M, 3) # TODO should this rather be (1, 3)?
+        o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)
+    	a_type_scores = self.linear_type(o_type) 							   # (1, M*d_2) -> (1, 3) # TODO should this rather be (1, 3)?
+
+        return sup_scores, start_scores, end_scores, a_type_scores
 
 
 
 
-
-    """
-    For each of the o_ outputs, we need a tensor of labels in order to compute the loss. 
-    This means:
-    - o_sup: look at the supporting facts and graph.context: 
-        if the paragraph title is in supporting facts, fill graph.tokens with 1s for 
-        the corresponding tokens (might need to use a counter)
-    - o_type: look at the answers. Each column of the label tensor is one answer type:
-        'yes' is column 0, 'no' is column 1, anything else is column 2
-    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
-        take graph.tokens and look for each token:
-        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
-        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
-    """

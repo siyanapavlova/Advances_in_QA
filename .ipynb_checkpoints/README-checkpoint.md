@@ -26,7 +26,7 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 The paper describes an architecture which is split into 5 modules:
 1) **paragraph selector** returns only the most relevant paragraphs (= "the context")
 2) **graph constructor** returns an entity graph from the context
-3) **encoder** uses BERT to encode the context and the question
+3) **encoder** uses BERT to token_ids the context and the question
 4) **fusion block** – the heard of the DFGN – looks at parts of the entity graph for several iterations
 5) **LSTM prediction layer** takes the fusion block's output and returns the final answer
 

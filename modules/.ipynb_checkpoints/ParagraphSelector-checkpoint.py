@@ -21,7 +21,7 @@ def encode(text,
     ''' TODO: document
     '''
     
-    input_ids = torch.tensor([tokenizer.encode(text)])
+    input_ids = torch.tensor([tokenizer.token_ids(text)])
     all_hidden_states, all_attentions = model(input_ids)[-2:]
     
     # This is the embedding of the [CLS] token.
@@ -99,7 +99,7 @@ class ParagraphSelector():
         ''' TODO: document
         '''
 
-        input_ids = torch.tensor([self.tokenizer.encode(text)])
+        input_ids = torch.tensor([self.tokenizer.token_ids(text)])
         all_hidden_states, all_attentions = self.encoder_model(input_ids)[-2:]
 
         # This is the embedding of the [CLS] token.
