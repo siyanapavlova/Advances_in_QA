@@ -74,7 +74,7 @@ class EntityGraph():
 
         self._find_nodes(tag_with=tagger)
         self._connect_nodes()
-        self._add_entity_spans()
+        #self._add_entity_spans() #CLEANUP because it's probably never used and just causes an error
         self.prune(max_nodes) # requires entity links
         self.M = self.entity_matrix(add_token_mapping_to_graph=True) # a tensor
 
@@ -206,7 +206,7 @@ class EntityGraph():
                     self.graph[k1]["links"].append((k2, 2))
                     self.graph[k2]["links"].append((k1, 2))
 
-    def _add_entity_spans(self):
+    def _add_entity_spans(self): #TODO CLEANUP because this is parobably never used!
         """
         Map each entity onto their character span at the scope of the whole
         context. This assumes that each sentence/paragraph is separated with
@@ -290,9 +290,9 @@ class EntityGraph():
 
         """ create binary matrix from the mapping """
         M = np.zeros((len(self.tokens), len(mapping)), dtype="float32")
-        for node,tokens in mapping.items():
-            for tok in tokens:
-                M[tok][node] = 1
+        for n_i, (node,tokens) in enumerate(mapping.items()):
+            for t_i, token in enumerate(tokens):
+                M[t_i][n_i] = 1
 
         return torch.from_numpy(M)
 

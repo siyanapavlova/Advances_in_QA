@@ -18,6 +18,8 @@ from torch.nn import functional as nnF
 import string
 import difflib
 
+from pprint import pprint
+
 def loop_input(rtype=str, default=None, msg=""):
     """
     Wrapper function for command-line input that specifies an input type
@@ -247,6 +249,7 @@ class ConfigReader():
         self.params.update({paramname:value})
 
 class Timer():
+    #TODO implement method for recurrent actions
     # TODO docstring
     def __init__(self):
         self.T0 = time()
@@ -291,7 +294,7 @@ class HotPotDataHandler():
 
     def data_for_paragraph_selector(self):
         """
-        #TODO docstring
+        # TODO docstring; mention that this is what we call 'raw_point' at other places
         Returns a list of tuples (question_id, supporting_facts, query, paragraphs, answer),
         where supporting_facts is a list of strings,
         query is a string,
@@ -312,7 +315,7 @@ class HotPotDataHandler():
 
 
 
-def make_labeled_data_for_predictor(graph, raw_point):
+def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     TODO update docstring
     Prepare labeled data for the Predictor.
@@ -351,7 +354,7 @@ def make_labeled_data_for_predictor(graph, raw_point):
     end_labels = torch.zeros(M)
     type_labels = torch.zeros(3)
 
-    answer = raw_point["answer"].lower()
+    answer = raw_point[4].lower()
 
     # get answer type
     type_labels[0] = answer == "yes"
@@ -369,41 +372,37 @@ def make_labeled_data_for_predictor(graph, raw_point):
     # get supporting facts (paragraphs)
     # spans shape: {paragraph_ID:(abs_start,abs_end)}
     # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
-    spans = {}
+    spans = {} # dict[int:(int,int)]
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
-    string_paragraphs = ["".join(p).lower() for p in list_context] # make context into a list of strings
+    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings (one string per paragraph)
+    # use an extra tokenizer again in order to have the context's tokens grouped into paragraphs
+    tokenized_paragraphs = [tokenizer.tokenize(p) for p in string_paragraphs] # list[list[str]], other than graph.tokens, which is list[str]
 
-    print(f"string_paragraphs: {string_paragraphs}")
+    #print(f"string_paragraphs: {string_paragraphs}") #CLEANUP
     
-    cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
-    curr_paranum = 0
     curr_start = 0
+    for p_num, p_tokens in enumerate(tokenized_paragraphs):
+        curr_end = curr_start+len(p_tokens)
+        spans[p_num] = (curr_start, curr_end) # save paragraph span
+        curr_start = curr_end + 1 # move to next paragraph
 
-    accumulated_string = ""
-
-    for i, t in enumerate(graph.tokens):  # iterate from beginning to end
-        if t.startswith("##"): # append the wordpiece to the previous token
-            accumulated_string += t.strip("#") # add the current token, but without '##'
-        elif t in string.punctuation:
-            accumulated_string += t
-        else: # nothing special happens.
-            accumulated_string += " " + t
-
-        # if accumulated_string == current paragraph
-        # save paragraph span and move to next paragraph
-        if string_paragraphs[curr_paranum].strip() == accumulated_string.strip():
-            spans[curr_paranum] = (curr_start, i)
-            accumulated_string = ""
-            curr_start = i + 1
-            curr_paranum += 1
-    print(f"spans: {spans}")
+    #pprint(spans) #CLEANUP
 
     for i, para in enumerate(graph.context):
-        if para[0] in raw_point["supporting_facts"]:
+        #pprint(graph.context) #CLEANUP
+        if para[0] in raw_point[1]:
             # make tokens within the span of the paragraph ones
+            #print("spans[i][0]",spans[i][0]) #CLEANUP
+            #print("spans[i][1] + 1",spans[i][1] + 1) #CLEANUP
             sup_labels[ spans[i][0] : spans[i][1] + 1 ] = 1
 
-    return sup_labels, start_labels, end_labels, type_labels
+    # unsqueeze the labels to match the outputs of the predictor
+    sup_labels = sup_labels.unsqueeze(0).unsqueeze(-1)     # (M,) -> (1, M, 1)
+    start_labels = start_labels.unsqueeze(0).unsqueeze(-1) # (M,) -> (1, M, 1)
+    end_labels = end_labels.unsqueeze(0).unsqueeze(-1)     # (M,) -> (1, M, 1)
+    type_labels = type_labels.unsqueeze(0)                 # (3,) -> (1, 3)
+
+    return (sup_labels, start_labels, end_labels, type_labels)
 
 
 
@@ -474,9 +473,9 @@ class BiDAFNet(torch.nn.Module):
         cq = []
         for i in range(q_len):
             qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
-            #print(f"qi: {qi.shape} \n emb1: {emb1.shape} \n emb2: {emb2.shape}") #CLEANUP
+            print(f"i: {i}\nqi: {qi.shape} \nemb1: {emb1.shape} \nemb2: {emb2.shape}") #CLEANUP
             ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (batch, c_len, 1) --> (batch, c_len)
-            #print(f"ci: {ci.shape}") #CLEANUP
+            print(f"ci: {ci.shape}\n") #CLEANUP
             cq.append(ci) # (q_len, batch, c_len)
         cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
 

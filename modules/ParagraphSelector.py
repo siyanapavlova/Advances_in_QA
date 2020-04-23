@@ -379,7 +379,7 @@ class ParagraphSelector():
                              the paragraph is shorter then text_length
                              default is 0
         :param text_length: text_length of the paragraph - paragraph will
-                            be padded if its lenght is less than this value
+                            be padded if its length is less than this value
                             and trimmed if it is more, default is 512
         :param device: device for processing; default is 'cpu'
 
@@ -393,7 +393,7 @@ class ParagraphSelector():
 
         for p in datapoint[3]:
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = self.tokenizer.token_ids(datapoint[2] + " [SEP] " + ("").join(p[1]),
+            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]),
                                                  max_length=512)
 
             # Add padding if there are fewer than text_length tokens,

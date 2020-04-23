@@ -13,13 +13,13 @@ class Predictor(nn.Module):
     #TODO docstring
 
     def __init__(self, context_length, embedding_size):
-    	"""
-    	TODO: update docstring
+        """
+        TODO: update docstring
 
-    	Initialise parameters and layers for Predictor.
+        Initialise parameters and layers for Predictor.
 
         :param context_length
-    	:param embedding_size:
+        :param embedding_size:
         """
         super(Predictor, self).__init__() # the following build on this
 
@@ -29,7 +29,7 @@ class Predictor(nn.Module):
 
         """
         QUESTIONNNNNSSSSS:
-
+        
         1. Where does 2*d_2 come from (authors' code, line 365, 368, etc.)
         2. How are the embeddings concatenated for the linear layer (by row or column?)? 
             -> along d2, probably
@@ -65,18 +65,18 @@ class Predictor(nn.Module):
 
         Ct = context_emb.unsqueeze(0) # (1, M, d2)
 
-    	o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
+        o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
         sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 1)
 
-    	o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
-    	start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) # TODO make sure that the batch axis doesn't make trouble
+        o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
+        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) # TODO make sure that the batch axis doesn't make trouble
 
-    	o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-    	end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1)
+        o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
+        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1)
 
-    	o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
+        o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
         o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)
-    	a_type_scores = self.linear_type(o_type) 							   # (1, M*d_2) -> (1, 3) # TODO should this rather be (1, 3)?
+        a_type_scores = self.linear_type(o_type) 							   # (1, M*d_2) -> (1, 3) # TODO should this rather be (1, 3)?
 
         return sup_scores, start_scores, end_scores, a_type_scores
 

@@ -5,5 +5,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="GWOT" />
+    <orderEntry type="module" module-name="data_in_QA" />
   </component>
 </module>
