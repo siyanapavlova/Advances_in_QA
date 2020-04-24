@@ -33,6 +33,7 @@ if __name__ == '__main__':
     model_abs_path = cfg('model_abs_dir') + args.model_name + "/"
     #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else ''
     losses_abs_path = model_abs_path + args.model_name + ".losses"
+    devscores_abs_path = model_abs_path + args.model_name + ".devscores"
     traintime_abs_path = model_abs_path + args.model_name + ".times"
 
     # check all relevant file paths and directories before starting training
@@ -50,11 +51,9 @@ if __name__ == '__main__':
 
     take_time("parameter input")
 
-
+    #CLEANUP
+    """
     #========== DATA PREPARATION
-
-
-
     try:
         with open(cfg("pickled_train_data"), "rb") as f:
             train_data = pickle.load(f)
@@ -62,7 +61,6 @@ if __name__ == '__main__':
         with open(cfg("pickled_dev_data"), "rb") as f:
             dev_data = pickle.load(f)
             dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
-
 
     except:
         print(f"Reading data from {cfg('data_abs_path')}...")
@@ -89,8 +87,49 @@ if __name__ == '__main__':
 
         with open(cfg("pickled_dev_data"), "wb") as f:
             pickle.dump(dev_data, f)
+    take_time("data preparation")
+    """
 
+    # ========== DATA PREPARATION
+    # TODO add comments
+    # TODO improve variable/parameter names
 
+    # try to load pickled data, and in case it doesn't work, read the whole HotPotQA dataset
+    try:
+        with open(cfg("pickled_train_data"), "rb") as f:
+            train_data_raw = pickle.load(f)
+            dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(train_data_raw)
+        with open(cfg("pickled_dev_data"), "rb") as f:
+            dev_data_raw = pickle.load(f)
+            # restrict loaded dev data to the required percentage
+            dev_data_raw = dev_data_raw[:cfg('percent_for_eval_during_training') * dataset_size]
+
+    except:  # TODO why does it always go to this exception instead of loading the pickled data?
+        print(f"Reading data from {cfg('data_abs_path')}...")  # the whole HotPotQA training set
+        dh = HotPotDataHandler(cfg("data_abs_path"))
+        data = dh.data_for_paragraph_selector()  # get raw points
+        dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(data)
+
+        print("Splitting data...")  # split into what we need DURING training
+        train_data_raw, dev_data_raw = train_test_split(data[:dataset_size],
+                                                        # restricts the number of training+dev examples
+                                                        test_size=cfg('percent_for_eval_during_training'),
+                                                        random_state=cfg('shuffle_seed'),
+                                                        shuffle=True)
+        # ParagraphSelector.train() requires this step
+        train_data = ParagraphSelector.make_training_data(train_data_raw,
+                                                          text_length=cfg("text_length"))
+
+        with open(cfg("pickled_train_data"), "wb") as f:
+            pickle.dump(train_data_raw, f)
+
+        with open(cfg("pickled_dev_data"), "wb") as f:
+            pickle.dump(dev_data_raw, f)
+
+    # group training data into batches
+    bs = cfg("batch_size")
+    N = len(train_data_raw)
+    train_data_raw = [train_data_raw[i: i + bs] for i in range(0, N, bs)]
 
     take_time("data preparation")
 
@@ -100,13 +139,13 @@ if __name__ == '__main__':
     ps = ParagraphSelector.ParagraphSelector(cfg("bert_model_path"))
 
     print(f"training for {cfg('epochs')} epochs...")
-    losses = ps.train(train_data,
-                      dev_data[:dev_data_limit],
-                      model_abs_path,
-                      epochs=cfg("epochs"),
-                      batch_size=cfg("batch_size"),
-                      learning_rate=cfg("learning_rate"),
-                      eval_interval=cfg("eval_interval"))
+    losses, dev_scores = ps.train(train_data, # pre-processed data as tensors
+                          dev_data_raw, # lightly processed data; lists, strings etc.
+                          model_abs_path,
+                          epochs=cfg("epochs"),
+                          batch_size=cfg("batch_size"),
+                          learning_rate=cfg("learning_rate"),
+                          eval_interval=cfg("eval_interval"))
     take_time(f"training")
 
     # print(f"Saving model in {model_abs_path}...")
@@ -115,6 +154,13 @@ if __name__ == '__main__':
     print(f"Saving losses in {losses_abs_path}...")
     with open(losses_abs_path, "w") as f:
         f.write("\n".join([str(l) for l in losses]))
+
+    print(f"Saving dev scores in {devscores_abs_path}...")
+    with open(devscores_abs_path, "w") as f:
+        score_strings = []
+        for tup in dev_scores:
+            score_strings.append("\t".join([str(v) for v in tup]))
+        f.write("\n".join(score_strings))
 
     print(f"Saving times taken to {traintime_abs_path}...")
     with open(traintime_abs_path, 'w', encoding='utf-8') as f:

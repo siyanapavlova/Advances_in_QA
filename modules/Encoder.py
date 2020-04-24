@@ -63,6 +63,8 @@ class Encoder(torch.nn.Module):
         if type(c_token_ids) == torch.Tensor:
             c_token_ids = c_token_ids.tolist()
 
+
+
         all_token_ids = q_token_ids + c_token_ids
         len_all = len(all_token_ids)
         len_query = len(q_token_ids)
@@ -81,6 +83,8 @@ class Encoder(torch.nn.Module):
                 trim_this = q_token_ids
                 attach_this = c_token_ids
             all_token_ids = trim_this[:len_all-len(attach_this)+1] + attach_this
+
+
 
         # get the embeddings corresponding to the token IDs
         all_hidden_states, all_attentions = self.encoder_model(torch.tensor([all_token_ids]))[-2:]

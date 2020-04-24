@@ -184,6 +184,7 @@ class ParagraphSelector():
                               default is 0.0001
 
         :return losses: a list of losses
+        :return dev_scores: a list of tuples (evaluation step, p, r, f1, acc.)
         """
         # Use Binary Cross Entropy as a loss function instead of MSE
         # There are papers on why MSE is bad for classification
@@ -191,6 +192,7 @@ class ParagraphSelector():
         optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate)
 
         losses = []
+        dev_scores = []
 
         # Set the network into train mode
         self.net.train()
@@ -231,7 +233,8 @@ class ParagraphSelector():
                 c +=1
                 # Evaluate on validation set after some iterations
                 if c % batched_interval == 0:
-                    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data)
+                    p, r, f1, accuracy, _, _, _ = self.evaluate(dev_data)
+                    dev_scores.append((c/batched_interval, p, r, f1, accuracy))
 
                     if accuracy > best_acc:
                         print(f"Better eval found with accuracy {round(accuracy ,3)} (+{round(accuracy-best_acc, 3)})")
@@ -241,15 +244,18 @@ class ParagraphSelector():
                     else:
                         print(f"No improvement yet...")
 
+
+
                 optimizer.step()
 
         if not a_model_was_saved_at_some_point: # make sure that there is a model file
             self.net.save_pretrained(model_save_path)
 
-        return losses
+        return losses, dev_scores
     
     def evaluate(self, data, threshold=0.1, pad_token_id=0, text_length=512, try_gpu=True):
         """
+        #TODO mention here that it makes labels on the fly (per question)
         Evaluate a trained model on a dataset.
 
         :param data: a list of datapoints where each point has the
@@ -279,6 +285,7 @@ class ParagraphSelector():
         :return precision: precision for the model
         :return recall: recall for the model
         :return f1: f1 score for the model
+        :return acc: accuracy for the model
         :return ids: list of ids of all the evaluated points
         :return all_true: true labels for the datapoints
                           list(list(boolean)), a list of datapoints
@@ -311,8 +318,8 @@ class ParagraphSelector():
                                         device=device) #point[2] are the paragraphs, point[1] is the query
             para_true = []
             para_pred = []
-            for para in point[3]:
-                para_true.append(para[0] in point[1])
+            for para in point[3]: # iterate over all 10 paragraphs
+                para_true.append(para[0] in point[1]) # true if paragraph's title is in the supporting facts
                 para_pred.append(para in context)
             all_true.append(para_true)
             all_pred.append(para_pred)

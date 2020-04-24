@@ -473,9 +473,9 @@ class BiDAFNet(torch.nn.Module):
         cq = []
         for i in range(q_len):
             qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
-            print(f"i: {i}\nqi: {qi.shape} \nemb1: {emb1.shape} \nemb2: {emb2.shape}") #CLEANUP
+            #print(f"i: {i}\nqi: {qi.shape} \nemb1: {emb1.shape} \nemb2: {emb2.shape}") #CLEANUP
             ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (batch, c_len, 1) --> (batch, c_len)
-            print(f"ci: {ci.shape}\n") #CLEANUP
+            #print(f"ci: {ci.shape}\n") #CLEANUP
             cq.append(ci) # (q_len, batch, c_len)
         cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
 
