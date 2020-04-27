@@ -57,33 +57,30 @@ class Encoder(torch.nn.Module):
         :return: encoded and BiDAF-ed context of shape (batch, c_len, output_size)
         """
 
+        #TODO rename variables to avoid confusion!!!
+
         #TODO maybe change this in order to avoid unnecessary computing?
         if type(q_token_ids) == torch.Tensor:
             q_token_ids = q_token_ids.tolist()
         if type(c_token_ids) == torch.Tensor:
             c_token_ids = c_token_ids.tolist()
 
-
-
-        all_token_ids = q_token_ids + c_token_ids
-        len_all = len(all_token_ids)
         len_query = len(q_token_ids)
         len_context = len(c_token_ids)
 
-        #TODO 23.04.2020: identify the longer and the shorter one out of c and q and then handle them
+        if len_query+len_context > self.text_length: # we need to trim
+            if len_context >= len_query: # trim whatever 'context' is
+                c_token_ids = c_token_ids[:self.text_length - len_query+1]
+                len_context = len(c_token_ids)
+            else: # trim whatever 'query' is
+                q_token_ids = q_token_ids[:self.text_length - len_context+1]
+                len_query = len(q_token_ids)
 
-        # Add padding or trim to text_length
-        if len_all < self.text_length:
+        all_token_ids = q_token_ids + c_token_ids
+        len_all = len(all_token_ids)
+
+        if len_query+len_context < self.text_length: # we need to pad
             all_token_ids += [self.pad_token_id for _ in range(self.text_length - len_all)]
-        else:
-            if len_context >= len_query: # make sure that the longer one will be trimmed!
-                trim_this = c_token_ids
-                attach_this = q_token_ids
-            else:
-                trim_this = q_token_ids
-                attach_this = c_token_ids
-            all_token_ids = trim_this[:len_all-len(attach_this)+1] + attach_this
-
 
 
         # get the embeddings corresponding to the token IDs
@@ -146,6 +143,7 @@ class Encoder(torch.nn.Module):
         query_input_ids = self.tokenizer.encode(query,
                                                    add_special_tokens=False,
                                                    max_length=self.text_length)
+
         context_input_ids = self.tokenizer.encode(flatten_context(context),
                                                      add_special_tokens=False,
                                                      max_length=self.text_length)

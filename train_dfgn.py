@@ -50,9 +50,10 @@ class DFGN(torch.nn.Module):
 
         return outputs
 
-def train(net, train_data, dev_data, model_save_path, ps_path,
-          ps_threshold=0.1,
-          text_length=250, fb_passes=1, coefs=(0.5, 0.5),
+def train(net, train_data, dev_data, model_save_path,
+          ps_path, ps_threshold=0.1,
+          text_length=250,
+          fb_passes=1, coefs=(0.5, 0.5),
           epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None,
           timed=False):
     #TODO docstring
@@ -62,7 +63,7 @@ def train(net, train_data, dev_data, model_save_path, ps_path,
     :param train_data: training data (raw points), split into batches
     :param dev_data: data for evaluation during training (raw points), split into batches
     :param model_save_path:
-    :param text_length:
+    :param text_length: limit the context's number of tokens (used in EntityGraph)
     :param fb_passes: number of passes through the fusion block (fb)
     :param coefs: (float,float) coefficients for optimization (formula 15)
     :param epochs:
@@ -108,9 +109,12 @@ def train(net, train_data, dev_data, model_save_path, ps_path,
 
             """ DATA PROCESSING """
             queries = [point[2] for point in batch]
-            contexts = [para_selector.make_context(point,
-                                                   threshold=ps_threshold) for point in batch]
-            graphs = [EntityGraph.EntityGraph(c) for c in contexts]
+
+            # make a list[ list[list[int], list[int]] ] for each point in the batch
+            contexts = [para_selector.make_context(point,threshold=ps_threshold)
+                        for point in batch]
+
+            graphs = [EntityGraph.EntityGraph(c, context_length=text_length) for c in contexts]
 
             # turn the texts into tensors in order to put them on the GPU
             qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)] # list[ (list[int], list[int]) ]

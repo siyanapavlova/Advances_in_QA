@@ -37,7 +37,7 @@ class EntityGraph():
     A call to the object with one or more IDs will return a sub-graph.
     """
 
-    def __init__(self, context=None, tagger='flair', max_nodes=40):
+    def __init__(self, context=None, context_length=512, tagger='flair', max_nodes=40):
         """
         Initialize a graph object with a 'context'.
         A context is a list of paragraphs and each paragraph is a 2-element list
@@ -46,7 +46,7 @@ class EntityGraph():
         Graph nodes are identified by NER; either by flair or by StanfordCoreNLP.
 
         :param context: one or more paragraphs of text
-        :type context: list[ list[ str, list[str] ] ]
+        :type context: list[ list[ list[int], list[int] ] ]
         :param tagger: one of 'flair' or 'stanford'
         :type tagger: str
         :type max_nodes: int
@@ -67,7 +67,7 @@ class EntityGraph():
             ]
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        self.tokens = self.tokenizer.tokenize(self.flatten_context())
+        self.tokens = self.tokenizer.tokenize(self.flatten_context())[:context_length] # trim to exact length
 
         self.graph = {}
         self.discarded_nodes = {}

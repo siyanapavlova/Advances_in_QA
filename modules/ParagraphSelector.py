@@ -7,8 +7,11 @@ import torch
 from transformers import BertTokenizer, BertModel, BertPreTrainedModel, BertConfig
 from sklearn.utils import shuffle
 import os,sys,inspect
+import math
 from tqdm import tqdm
 import argparse
+
+from pprint import pprint
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score
@@ -362,7 +365,8 @@ class ParagraphSelector():
         return score
     
     def make_context(self, datapoint, threshold=0.1,
-                     pad_token_id=0, text_length=512, device=torch.device('cpu')):
+                     text_length=512, context_length=512,
+                     device=torch.device('cpu')):
         """
         Given a datapoint from HotPotQA, build the context for it.
         The context consists of all paragraphs included in that
@@ -375,7 +379,7 @@ class ParagraphSelector():
                                       to the datapoint id in HotPotQA
                                 supporting_facts is a list of strings,
                                 query is a string,
-                                paragraphs is a 10-element list where
+                                paragraphs is a 10-element list of lists where
                                     the first element is a string
                                     the second element is a list of sentences (i.e., a list of strings)
         :param threshold: a float between zero and one;
@@ -385,38 +389,93 @@ class ParagraphSelector():
         :param pad_token_id: id of the pad token used to pad when
                              the paragraph is shorter then text_length
                              default is 0
-        :param text_length: text_length of the paragraph - paragraph will
+        :param text_length: text_length of the paragraph - paragraph will #TODO update this: paragraph-individual trimming
                             be padded if its length is less than this value
                             and trimmed if it is more, default is 512
         :param device: device for processing; default is 'cpu'
 
-        :return context: the context for the datapoint
-                shape: [[p1_title, [p1_s1, p1_s2 ...]],
-                        [p2_title, [p2_s1, p2_s2, ...]],
+        :return context: the context for the datapoint (title and paragraph are ids) # TODO downdate this!
+                shape: [ [[p1_title], [p1_s1, p1_s2, ...]],
+                         [[p2_title], [p2_s1, p2_s2, ...]],
                         ...]
 
         """
+
+        # for the case that a user picks a limit greater than BERT's max length
+        if text_length > 512:
+            print("Maximum input length for Paragraph Selector exceeded; continuing with 512.")
+            text_length = 512
+        if context_length > 512:
+            print("Maximum context length exceeded; continuing with 512.")
+            context_length = 512
+
+
         context = []
 
+        # encode header and paragraph individually to be able to join just paragraphs
+        # automatically prefixes [CLS] and appends [SEP]
+        query_token_ids = self.tokenizer.encode(datapoint[2],
+                                                 max_length=512) # to avoid warnings
+
+        #TODO 24.4.2020 continue here: re-write to return shortened strings
         for p in datapoint[3]:
-            # automatically prefixes [CLS] and appends [SEP]
-            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]),
-                                                 max_length=512)
+            header_token_ids = self.tokenizer.encode(p[0],
+                                                   max_length=512, # to avoid warnings
+                                                   add_special_tokens=False)
+            # encode sentences individually
+            sentence_token_ids = [self.tokenizer.encode(sentence,
+                                                   max_length=512, # to avoid warnings
+                                                   add_special_tokens=False)
+                              for sentence in p[1]]
+
+            token_ids = query_token_ids \
+                      + header_token_ids \
+                      + [token for sent in sentence_token_ids for token in sent]
+            token_ids[-1] = self.tokenizer.sep_token_id  # make sure that it ends with a SEP
 
             # Add padding if there are fewer than text_length tokens,
-            # else trim to text_length
             if len(token_ids) < text_length:
-                token_ids += [pad_token_id for _ in range(text_length - len(token_ids))]
-            else:
+                token_ids += [self.tokenizer.pad_token_id for _ in range(text_length - len(token_ids))]
+            else: # else trim to text_length
                 token_ids = token_ids[:text_length]
+                token_ids[-1] = self.tokenizer.sep_token_id  # make sure that it still ends with a SEP
 
             # do the actual prediction & decision
             encoded_p = torch.tensor([token_ids])
             score = self.predict(encoded_p, device=device)
             if score > threshold:
-                context.append(p)
+                # list[list[int], list[list[int]]]
+                # no [CLS] or [SEP] here
+                context.append([header_token_ids, sentence_token_ids])
 
-        return context
+        # shorten each paragraph so that the combined length is not too big
+        # and decode so that strings are returned
+        #TODO maybe extract this to a function
+        trimmed_context = []# new data structure because we prioritise computing time over memory usage
+
+        cut_off_point = math.ceil(context_length/len(context)) # roughly cut to an even length
+        for i, (header, para) in enumerate(context):
+            pos = len(header) # the header counts towards the paragraph!
+            trimmed_context.append([self.tokenizer.decode(header), []])
+            for sentence in para:
+                #print(f"pos: {pos}   cut-off point: {cut_off_point}   tokens: {len(sentence)}") #CLEANUP
+                if pos + len(sentence) > cut_off_point:
+                    s = sentence[:cut_off_point - pos] # trim
+                    #print(f"   cut \n   {len(sentence)} {sentence}\n   to\n   {len(s)} {s}\n") #CLEANUP
+                    s = self.tokenizer.decode(s) # re-convert to a string
+                    if len(s) != 0:
+                        trimmed_context[i][1].append(s)
+                    break # don't continue to loop over further sentences of this paragraph
+                else:
+                    s = self.tokenizer.decode(sentence)
+                    trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
+                    pos += len(sentence) # go to the next sentence
+
+        #print(f"roughly trimmed context:") #CLEANUP
+        #pprint(trimmed_context) #CLEANUP
+        #print("\n\n") #CLEANUP
+
+        return trimmed_context
 
     def save(self, savepath):
         '''
