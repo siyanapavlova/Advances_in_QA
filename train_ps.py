@@ -117,12 +117,16 @@ if __name__ == '__main__':
                                                         random_state=cfg('shuffle_seed'),
                                                         shuffle=True)
 
+        if cfg("pickled_train_data") and cfg("pickled_dev_data"):
+            print(f"Pickling train/dev data for later re-use.")
+            print(f"Destinations: \n"
+                  f"   {cfg('pickled_train_data')}\n"
+                  f"   {cfg('pickled_dev_data')}")
+            with open(cfg("pickled_train_data"), "wb") as f:
+                pickle.dump(train_data_raw, f)
 
-        with open(cfg("pickled_train_data"), "wb") as f:
-            pickle.dump(train_data_raw, f)
-
-        with open(cfg("pickled_dev_data"), "wb") as f:
-            pickle.dump(dev_data_raw, f)
+            with open(cfg("pickled_dev_data"), "wb") as f:
+                pickle.dump(dev_data_raw, f)
 
     # ParagraphSelector.train() requires this step
     train_data = ParagraphSelector.make_training_data(train_data_raw,
