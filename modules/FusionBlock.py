@@ -165,23 +165,22 @@ class FusionBlock(nn.Module):
 					alphas[i][j] = float('inf')/sumex
 
 		""" compute total information received per node """
-		#E_t = [] #really N * (d2, 1)? #CLEANUP?
 		ents_with_new_information = []
 
 		for i in range(N):
-			#TODO 28.4.2020 continue here: some of the things are ints which gives
-			# complications when summing. Sort this out!
-
-			# j(scalar * (1, d2, 1)) --> sum --> (1, d2, 1) --> loop --> N*(1, d2, 1)
+			# non-connected nodes have an information flow of 0.
+			# j(scalar * (d2, 1)) --> sum --> (d2, 1) --> loop --> N*(d2, 1)
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
+											      for j, rel_type in graph.graph[i]["links"]]
 												  if graph.graph[i]["links"]
-												  else torch.zeros((1, self.d2, 1))
-											      for j, rel_type in graph.graph[i]["links"]
-												  ]))
-			print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
+												  else [torch.zeros((self.d2, 1))]
+												  ))
+			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
+			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
+			#print(f"   new length of ents_with_new_information: {len(ents_with_new_information)}") #CLEANUP
 			#print(f"   shape of this element: {ents_with_new_information[-1].shape}") #CLEANUP
 		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
-		E_t = F.relu(torch.stack(ents_with_new_information).squeeze(1)) # formula 8
+		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8
 
 		return E_t.squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
 

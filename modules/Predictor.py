@@ -76,9 +76,12 @@ class Predictor(nn.Module):
 
         o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
         o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)
-        a_type_scores = self.linear_type(o_type) 							   # (1, M*d_2) -> (1, 3) # TODO should this rather be (1, 3)?
+        a_type_scores = self.linear_type(o_type) 							   # (1, M*d_2) -> (1, 3)
 
-        return sup_scores, start_scores, end_scores, a_type_scores
+        return sup_scores.squeeze(0), \
+               start_scores.squeeze(0), \
+               end_scores.squeeze(0), \
+               a_type_scores.squeeze(0)
 
 
 

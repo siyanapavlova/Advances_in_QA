@@ -102,7 +102,7 @@ if __name__ == '__main__':
         with open(cfg("pickled_dev_data"), "rb") as f:
             dev_data_raw = pickle.load(f)
             # restrict loaded dev data to the required percentage
-            dev_data_raw = dev_data_raw[:cfg('percent_for_eval_during_training') * dataset_size]
+            dev_data_raw = dev_data_raw[:int(cfg('percent_for_eval_during_training') * dataset_size)]
 
     except:  # TODO why does it always go to this exception instead of loading the pickled data?
         print(f"Reading data from {cfg('data_abs_path')}...")  # the whole HotPotQA training set

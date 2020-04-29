@@ -146,7 +146,8 @@ def train(net, train_data, dev_data, model_save_path,
             # As 'graph' is not a tensor, normal batch processing isn't possible
             sups, starts, ends, types = [], [], [], []
             for query, context, graph in zip(q_ids_list, c_ids_list, graphs):
-                # (1,M,1), (1,M,1), (1,M,1), (1, 3) #TODO get rid of the first 1, which originally was thought as the batch dimension? (This might cause troubles, though!)
+                # (M,1), (M,1), (M,1), (3,)
+                #TODO 29.04.2020 change shape to fit the labels (because we're dealing with classes, not binary stuff)
                 o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
                 sups.append(o_sup)
                 starts.append(o_start)
@@ -154,7 +155,8 @@ def train(net, train_data, dev_data, model_save_path,
                 types.append(o_type)
 
             """ LOSSES & BACKPROP """
-            sup_loss = criterion(  torch.stack(sups),   torch.stack(sup_labels)) # TODO is this stacked in the right dimension?
+            # the stacks have shape (batch, M, 1)
+            sup_loss = sum([criterion(p,l) for p,l in zip(sups, sup_labels)])
             start_loss = criterion(torch.stack(starts), torch.stack(start_labels))
             end_loss = criterion(  torch.stack(ends),   torch.stack(end_labels))
             type_loss = criterion( torch.stack(types),  torch.stack(type_labels))
