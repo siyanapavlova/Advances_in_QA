@@ -56,6 +56,7 @@ class Encoder(torch.nn.Module):
         :param c_token_ids: list[int] or Tensor[int] - obtained from a tokenizer
         :return: encoded and BiDAF-ed context of shape (batch, c_len, output_size)
         """
+        MAX_LEN = 512
 
         #TODO rename variables to avoid confusion!!!
 
@@ -65,15 +66,18 @@ class Encoder(torch.nn.Module):
         if type(c_token_ids) == torch.Tensor:
             c_token_ids = c_token_ids.tolist()
 
-        len_query = len(q_token_ids)
-        len_context = len(c_token_ids)
+        len_query = len(q_token_ids) # 20
+        len_context = len(c_token_ids) # 502, obtained from ParagraphSelector
+        # self.text_length = 500
 
-        if len_query+len_context > self.text_length: # we need to trim
+        # we need to trim, otherwise (1) Bert will explode or (2) our context is longer than specified
+        if len_query+len_context > MAX_LEN or len_query+len_context > self.text_length:
+            cut_point = min(MAX_LEN - len_query, self.text_length)
             if len_context >= len_query: # trim whatever 'context' is
-                c_token_ids = c_token_ids[:self.text_length - len_query+1]
+                c_token_ids = c_token_ids[:cut_point]#:self.text_length - len_query] #CLEANUP?
                 len_context = len(c_token_ids)
             else: # trim whatever 'query' is
-                q_token_ids = q_token_ids[:self.text_length - len_context+1]
+                q_token_ids = q_token_ids[:cut_point]
                 len_query = len(q_token_ids)
 
         all_token_ids = q_token_ids + c_token_ids
@@ -109,6 +113,8 @@ class Encoder(torch.nn.Module):
         #print(q_emb)
         #print(c_emb)
 
+        # TODO check whether we actually always return something with text_length!!!
+        #  (in cases with large text_length and >512, we might return a context that is shorter than text_length)
         g = self.bidaf(q_emb, c_emb)
         return g
 

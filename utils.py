@@ -461,7 +461,7 @@ class BiDAFNet(torch.nn.Module):
         :param emb2: (batch, c_len, hidden_size)
         :return: (batch, c_len, output_size)
         """
-        #TODO implement batch size as first axis in the tensors
+        #TODO implement batch size as first axis in the tensors?
 
         # make sure that batch processing works, even for single data points
         emb1 = emb1.unsqueeze(0) if len(emb1.shape) < 3 else emb1

@@ -26,7 +26,6 @@ from utils import Timer
 
 def make_training_data(data,
                        text_length=512,
-                       pad_token_id = 0,
                        tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
     """
     Make a train tensor for each datapoint.
@@ -37,9 +36,6 @@ def make_training_data(data,
     :param text_length: id of the pad token used to pad when
                         the paragraph is shorter then text_length
                         default is 0
-    :param pad_token_id: text_length of the paragraph - paragraph will
-                         be padded if its lenght is less than this value
-                         and trimmed if it is more, default is 512
     :param tokenizer: default: BertTokenizer(bert-base-uncased)
 
     :return: a train tensor with two columns:
@@ -59,12 +55,12 @@ def make_training_data(data,
             point_string = point[2] + " [SEP] " + ("").join(para[1])
             
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = tokenizer.token_ids(point_string, max_length=512)
+            token_ids = tokenizer.encode(point_string, max_length=512)
             
             # Add padding if there are fewer than text_length tokens,
             # else trim to text_length
             if len(token_ids) < text_length:
-                token_ids += [pad_token_id for _ in range(text_length - len(token_ids))]
+                token_ids += [tokenizer.pad_token_id for _ in range(text_length - len(token_ids))]
             else:
                 token_ids = token_ids[:text_length]
             datapoints.append(token_ids)
@@ -206,12 +202,18 @@ class ParagraphSelector():
 
         # put the net on the GPU if possible
         if cuda_is_available:
+            #print("in PS.train(): cuda IS available!")#CLEANUP
             self.net = self.net.to(device)
+        #else:
+            #print("in PS.train(): cuda NOT available!")#CLEANUP
 
         print("Training...")
         
         #TODO: find a way to shuffle reproducibly
+
+        # (120, 250) --> batching --> (30, 4, 250)
         train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True)
+        #print(f"in PS.train: shape of train_data: {len(train_data.dataset)}")  # CLEANUP
 
         c = 0  # counter over taining examples
         best_acc = 0
@@ -225,6 +227,7 @@ class ParagraphSelector():
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 inputs, labels = batch
+                #print(inputs.shape) #CLEANUP
 
                 optimizer.zero_grad()
 
@@ -256,7 +259,7 @@ class ParagraphSelector():
 
         return losses, dev_scores
     
-    def evaluate(self, data, threshold=0.1, pad_token_id=0, text_length=512, try_gpu=True):
+    def evaluate(self, data, threshold=0.1, text_length=512, try_gpu=True):
         """
         #TODO mention here that it makes labels on the fly (per question)
         Evaluate a trained model on a dataset.
@@ -276,9 +279,6 @@ class ParagraphSelector():
                           paragraphs that get a score above the
                           threshold, become part of the context,
                           default is 0.1
-        :param pad_token_id: id of the pad token used to pad when
-                             the paragraph is shorter then text_length
-                             default is 0
         :param text_length: text_length of the paragraph - paragraph will
                             be padded if its lenght is less than this value
                             and trimmed if it is more, default is 512
@@ -316,7 +316,6 @@ class ParagraphSelector():
         for point in tqdm(data, desc="eval points"):
             context = self.make_context(point,
                                         threshold=threshold,
-                                        pad_token_id=pad_token_id,
                                         text_length=text_length,
                                         device=device) #point[2] are the paragraphs, point[1] is the query
             para_true = []
@@ -386,9 +385,6 @@ class ParagraphSelector():
                           paragraphs that get a score above the
                           threshold, become part of the context,
                           default is 0.1
-        :param pad_token_id: id of the pad token used to pad when
-                             the paragraph is shorter then text_length
-                             default is 0
         :param text_length: text_length of the paragraph - paragraph will #TODO update this: paragraph-individual trimming
                             be padded if its length is less than this value
                             and trimmed if it is more, default is 512
@@ -453,7 +449,7 @@ class ParagraphSelector():
         #TODO maybe extract this to a function
         trimmed_context = []# new data structure because we prioritise computing time over memory usage
 
-        cut_off_point = math.ceil(context_length/len(context)) # roughly cut to an even length
+        cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
         for i, (header, para) in enumerate(context):
             pos = len(header) # the header counts towards the paragraph!
             trimmed_context.append([self.tokenizer.decode(header), []])

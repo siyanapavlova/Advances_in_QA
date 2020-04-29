@@ -116,9 +116,7 @@ if __name__ == '__main__':
                                                         test_size=cfg('percent_for_eval_during_training'),
                                                         random_state=cfg('shuffle_seed'),
                                                         shuffle=True)
-        # ParagraphSelector.train() requires this step
-        train_data = ParagraphSelector.make_training_data(train_data_raw,
-                                                          text_length=cfg("text_length"))
+
 
         with open(cfg("pickled_train_data"), "wb") as f:
             pickle.dump(train_data_raw, f)
@@ -126,10 +124,13 @@ if __name__ == '__main__':
         with open(cfg("pickled_dev_data"), "wb") as f:
             pickle.dump(dev_data_raw, f)
 
+    # ParagraphSelector.train() requires this step
+    train_data = ParagraphSelector.make_training_data(train_data_raw,
+                                                      text_length=cfg("text_length"))
     # group training data into batches
-    bs = cfg("batch_size")
-    N = len(train_data_raw)
-    train_data_raw = [train_data_raw[i: i + bs] for i in range(0, N, bs)]
+    #bs = cfg("batch_size")
+    #N = len(train_data)
+    #train_data = [train_data[i: i + bs] for i in range(0, N, bs)]
 
     take_time("data preparation")
 

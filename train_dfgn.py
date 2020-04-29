@@ -63,7 +63,7 @@ def train(net, train_data, dev_data, model_save_path,
     :param train_data: training data (raw points), split into batches
     :param dev_data: data for evaluation during training (raw points), split into batches
     :param model_save_path:
-    :param text_length: limit the context's number of tokens (used in EntityGraph)
+    :param text_length: limit the context's number of tokens (used in ParagraphSelector and EntityGraph)
     :param fb_passes: number of passes through the fusion block (fb)
     :param coefs: (float,float) coefficients for optimization (formula 15)
     :param epochs:
@@ -111,7 +111,9 @@ def train(net, train_data, dev_data, model_save_path,
             queries = [point[2] for point in batch]
 
             # make a list[ list[list[int], list[int]] ] for each point in the batch
-            contexts = [para_selector.make_context(point,threshold=ps_threshold)
+            contexts = [para_selector.make_context(point,
+                                                   threshold=ps_threshold,
+                                                   context_length=text_length)
                         for point in batch]
 
             graphs = [EntityGraph.EntityGraph(c, context_length=text_length) for c in contexts]

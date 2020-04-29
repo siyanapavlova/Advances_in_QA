@@ -27,16 +27,16 @@ class FusionBlock(nn.Module):
 		"""
 		super(FusionBlock, self).__init__()
 
-		d2 = emb_size
-		self.droot = sqrt(d2) 						  # for formula 2
-		self.V = nn.Parameter(torch.Tensor(d2, 2*d2)) # for formula 2
-		self.U = nn.Parameter(torch.Tensor(d2, 2*d2)) # for formula 5
-		self.b = nn.Parameter(torch.Tensor(d2, 1))    # for formula 5
-		self.W = nn.Parameter(torch.Tensor(2*d2, 1))  # for formula 6
+		self.d2 = emb_size
+		self.droot = sqrt(self.d2) 						  # for formula 2
+		self.V = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 2
+		self.U = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 5
+		self.b = nn.Parameter(torch.Tensor(self.d2, 1))    # for formula 5
+		self.W = nn.Parameter(torch.Tensor(2*self.d2, 1))  # for formula 6
 
 		self.bidaf = BiDAFNet(hidden_size=300)
 
-		self.g2d_layer = nn.LSTM(2*d2, d2)
+		self.g2d_layer = nn.LSTM(2*self.d2, self.d2)
 
 
 
@@ -144,18 +144,19 @@ class FusionBlock(nn.Module):
 		hidden = torch.stack([torch.matmul(self.U,e) + self.b for e in E]) # TODO avoid the for-loop
 
 		for i, h_i in enumerate(hidden): # h_i.shape = (d2, 1) #TODO try to avoid these for-loops
+
 			for j, rel_type in graph.graph[i]["links"]: # only for neighbor nodes
 				pair = torch.cat((h_i, hidden[j])) # (2d2, 1)
 				betas[i][j] = F.leaky_relu(torch.matmul(self.W.T, pair)) # formula 6
 
-				# avoid overflow errors for too big values
-				exes = [] #TODO how to handle overflows? With nan values?
-				for j in range(N):
-					try:
-						exes.append(exp(betas[i][j]))
-					except OverflowError:
-						exes.append(float('inf'))
-				sumex = sum(exes)
+			# avoid overflow errors for too big values
+			exes = [] #TODO how to handle overflows? With nan values?
+			for j in range(N):
+				try:
+					exes.append(exp(betas[i][j])) # if the node has no links, this appends a 1
+				except OverflowError:
+					exes.append(float('inf'))
+			sumex = sum(exes) # if the node has no links, this will be N
 
 			for j in range(N): # compute scores for all node combinations
 				try:
@@ -164,15 +165,25 @@ class FusionBlock(nn.Module):
 					alphas[i][j] = float('inf')/sumex
 
 		""" compute total information received per node """
-		E_t = [] #really N * (d2, 1)?
+		#E_t = [] #really N * (d2, 1)? #CLEANUP?
+		ents_with_new_information = []
 
 		for i in range(N):
-			# scalar * (j, d2, 1) --> sum --> (d2, 1)
-			score_sum = sum([alphas[j][i] * hidden[j] for j, rel_type in graph.graph[i]["links"]])
-			# --> relu --> (d2, 1)
-			E_t.append(F.relu(score_sum)) # formula 8
+			#TODO 28.4.2020 continue here: some of the things are ints which gives
+			# complications when summing. Sort this out!
 
-		return torch.stack(E_t).squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
+			# j(scalar * (1, d2, 1)) --> sum --> (1, d2, 1) --> loop --> N*(1, d2, 1)
+			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
+												  if graph.graph[i]["links"]
+												  else torch.zeros((1, self.d2, 1))
+											      for j, rel_type in graph.graph[i]["links"]
+												  ]))
+			print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
+			#print(f"   shape of this element: {ents_with_new_information[-1].shape}") #CLEANUP
+		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
+		E_t = F.relu(torch.stack(ents_with_new_information).squeeze(1)) # formula 8
+
+		return E_t.squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
 
 	def graph2doc(self, entity_embs, bin_M, context_emb):
 		"""
