@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/../../../../thesis/GWOT/.idea/GWOT.iml" filepath="$PROJECT_DIR$/../../../../thesis/GWOT/.idea/GWOT.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../data_in_QA/.idea/data_in_QA.iml" filepath="$PROJECT_DIR$/../data_in_QA/.idea/data_in_QA.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/project_AQA.iml" filepath="$PROJECT_DIR$/.idea/project_AQA.iml" />
     </modules>
   </component>

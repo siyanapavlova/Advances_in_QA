@@ -17,37 +17,33 @@ class FusionBlock(nn.Module):
 	class defined in utils), and puts them together in its forward function.
 	"""
 
-	def __init__(self, context_emb, query_emb, graph):
+	def __init__(self, emb_size):
 		"""
 		Initialization function for the FusionBlock class
-
+		#TODO update docstring
 		:param context_emb: context embedding as obtained from Encoder, (M, d2)
 		:param query_emb: query embdding as obrained from Encoder, (L, d2)
 		:param graph: an entity graph as obrained from EntityGraph
 		"""
 		super(FusionBlock, self).__init__()
 
-		self.context_emb = context_emb # (M, d2) (context embedding from Encoder)
-		self.query_emb = query_emb # (L, d2)
-		self.bin_M = graph.M # (M, N) (binary matrix from EntityGraph)
-		self.graph = graph # EntityGraph object
-
-		d2 = self.query_emb.shape[1]
-		self.droot = sqrt(d2) 						  # for formula 2
-		self.V = nn.Parameter(torch.Tensor(d2, 2*d2)) # for formula 2
-		self.U = nn.Parameter(torch.Tensor(d2, 2*d2)) # for formula 5
-		self.b = nn.Parameter(torch.Tensor(d2, 1))    # for formula 5
-		self.W = nn.Parameter(torch.Tensor(2*d2, 1))  # for formula 6
+		self.d2 = emb_size
+		self.droot = sqrt(self.d2) 						  # for formula 2
+		self.V = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 2
+		self.U = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 5
+		self.b = nn.Parameter(torch.Tensor(self.d2, 1))    # for formula 5
+		self.W = nn.Parameter(torch.Tensor(2*self.d2, 1))  # for formula 6
 
 		self.bidaf = BiDAFNet(hidden_size=300)
 
-		self.g2d_layer = nn.LSTM(2*d2, d2)
+		self.g2d_layer = nn.LSTM(2*self.d2, self.d2)
 
 
 
-	def forward(self, passes=1):
+	def forward(self, context_emb, query_emb, graph, passes=1):
 		"""
 		Forward function of the FusionBlock.
+		#TODO update docstring
 
 		Performs a number of passes through the fusion block.
 		Uses the tok2ent, graph_attention, bidaf (from utils) and 
@@ -61,23 +57,25 @@ class FusionBlock(nn.Module):
 		:return Ct: updated context embedding (M, d2)
 		:return query_emb: updated query embedding (L, d2)
 		"""
+
 		for p in range(passes):
-			self.entity_embs = self.tok2ent() # (N, 2d2)
-			self.entity_embs = self.entity_embs.unsqueeze(2) # (N, 2d2, 1)
-			updated_entity_embs = self.graph_attention() # (N, d2)
+			entity_embs = self.tok2ent(context_emb, graph.M) # (N, 2d2)
+			entity_embs = entity_embs.unsqueeze(2) # (N, 2d2, 1)
+			updated_entity_embs = self.graph_attention(entity_embs, query_emb, graph) # (N, d2)
 
 			# the second one is updated; that's why it's the other way round as in the DFGN paper
-			self.query_emb = self.bidaf(updated_entity_embs, self.query_emb) # (N, d2) formula 9
+			query_emb = self.bidaf(updated_entity_embs, query_emb) # (N, d2) formula 9
 
-			Ct = self.graph2doc(updated_entity_embs) # (M, d2)
-			self.context_emb = Ct # update the context embeddings for the next pass
+			Ct = self.graph2doc(updated_entity_embs, graph.M, context_emb) # (M, d2)
+			context_emb = Ct # update the context embeddings for the next pass
 			#print(f"pass {p}:\n{Ct}\n")#CLEANUP
 
-		return Ct, self.query_emb
+		return Ct
 
 
-	def tok2ent(self):
+	def tok2ent(self, context_emb, bin_M):
 		"""
+		#TODO update docstring?
 		Document to Graph Flow from the paper (section 3.4, paragraph 2)
 
 		Obtain the embedding of the entities from the context embeddings.
@@ -85,14 +83,14 @@ class FusionBlock(nn.Module):
 
 		:return entity_emb: (N, 2d2) entity embeddings obtained from context embeddings
 		"""
-		M = self.context_emb.shape[0]
-		N = self.bin_M.shape[1]
+		M = context_emb.shape[0]
+		N = bin_M.shape[1]
 		#print(f"context_emb: {self.context_emb.shape}")#CLEANUP
 		#print(f"bin_M: {self.bin_M.shape}")  # CLEANUP
-		entity_emb = self.context_emb.unsqueeze(1).expand(-1, N, -1) # (M, N, d2)
+		entity_emb = context_emb.unsqueeze(1).expand(-1, N, -1) # (M, N, d2)
 		#print(f"entity_emb1: {entity_emb.shape}")  # CLEANUP
 
-		bin_M_prime = self.bin_M.unsqueeze(2) # (M, N, 1)
+		bin_M_prime = bin_M.unsqueeze(2) # (M, N, 1)
 		#print(f"bin_M_prime: {bin_M_prime.shape}")  # CLEANUP
 
 		entity_emb = entity_emb * bin_M_prime # (M, N, d2) * (M, N 1) = (M, N, d2)
@@ -110,8 +108,9 @@ class FusionBlock(nn.Module):
 
 		return entity_emb # (N, 2d2)
 
-	def graph_attention(self):
+	def graph_attention(self, entity_embs, query_emb, graph):
 		"""
+		#TODO update docstring?
 		This implements Dynamic Graph Attention (section 3.4, paragraph 3).
 		Each node of the entity graph propagates information
 		to its neighbors in order to produce updated entity
@@ -122,18 +121,18 @@ class FusionBlock(nn.Module):
 		#TODO avoid for-loops, but first make the method run.
 		#TODO avoid torch.Tensor where possible.
 		#TODO change all this to comply with batches! But before, think about the structure of this whole module.
-		N = self.entity_embs.shape[0] # number of entities, taken from  (N, 2d2, 1)
-		assert N == len(self.graph.graph) # CLEANUP? # N should be equal to the number of graph nodes
+		N = entity_embs.shape[0] # number of entities, taken from  (N, 2d2, 1)
+		assert N == len(graph.graph) # CLEANUP? # N should be equal to the number of graph nodes
 		
 		# formula 1 # (L, d2) --> (1, L, d2) --> (1, d2, L) --> (1, d2, 1)
-		q_emb = F.avg_pool1d(self.query_emb.unsqueeze(0).permute(0, 2, 1),
-							 kernel_size=self.query_emb.shape[0])
+		q_emb = F.avg_pool1d(query_emb.unsqueeze(0).permute(0, 2, 1),
+							 kernel_size=query_emb.shape[0])
 		q_emb = q_emb.permute(0, 2, 1).squeeze(0) # (1, 1, d2) --> (1, d2)
 
 		# N * ( (1, d2) x (d2, 2d2) x (2d2, 1) ) --> (N, 1, 1) # formula 2
-		gammas = torch.tensor([ torch.chain_matmul(q_emb, self.V, e)/self.droot for e in self.entity_embs ]) #TODO avoid for-loop and torch.tensor()
+		gammas = torch.tensor([ torch.chain_matmul(q_emb, self.V, e)/self.droot for e in entity_embs ]) #TODO avoid for-loop and torch.tensor()
 		mask = torch.sigmoid(gammas)   # (N, 1, 1) # formula 3
-		E = torch.stack([m*e for m,e in zip(mask, self.entity_embs.T)])  # (N, 1, 2d2) # formula 4
+		E = torch.stack([m*e for m,e in zip(mask, entity_embs.T)])  # (N, 1, 2d2) # formula 4
 		E = E.squeeze(1).T # (N, 2d2) --> (2d2, N) #TODO do we really need to squeeze?
 
 
@@ -145,18 +144,19 @@ class FusionBlock(nn.Module):
 		hidden = torch.stack([torch.matmul(self.U,e) + self.b for e in E]) # TODO avoid the for-loop
 
 		for i, h_i in enumerate(hidden): # h_i.shape = (d2, 1) #TODO try to avoid these for-loops
-			for j, rel_type in self.graph.graph[i]["links"]: # only for neighbor nodes
+
+			for j, rel_type in graph.graph[i]["links"]: # only for neighbor nodes
 				pair = torch.cat((h_i, hidden[j])) # (2d2, 1)
 				betas[i][j] = F.leaky_relu(torch.matmul(self.W.T, pair)) # formula 6
 
-				# avoid overflow errors for too big values
-				exes = [] #TODO how to handle overflows? With nan values?
-				for j in range(N):
-					try:
-						exes.append(exp(betas[i][j]))
-					except OverflowError:
-						exes.append(float('inf'))
-				sumex = sum(exes)
+			# avoid overflow errors for too big values
+			exes = [] #TODO how to handle overflows? With nan values?
+			for j in range(N):
+				try:
+					exes.append(exp(betas[i][j])) # if the node has no links, this appends a 1
+				except OverflowError:
+					exes.append(float('inf'))
+			sumex = sum(exes) # if the node has no links, this will be N
 
 			for j in range(N): # compute scores for all node combinations
 				try:
@@ -165,17 +165,26 @@ class FusionBlock(nn.Module):
 					alphas[i][j] = float('inf')/sumex
 
 		""" compute total information received per node """
-		E_t = [] #really N * (d2, 1)?
+		ents_with_new_information = []
 
 		for i in range(N):
-			# scalar * (j, d2, 1) --> sum --> (d2, 1)
-			score_sum = sum([alphas[j][i] * hidden[j] for j, rel_type in self.graph.graph[i]["links"]])
-			# --> relu --> (d2, 1)
-			E_t.append(F.relu(score_sum)) # formula 8
+			# non-connected nodes have an information flow of 0.
+			# j(scalar * (d2, 1)) --> sum --> (d2, 1) --> loop --> N*(d2, 1)
+			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
+											      for j, rel_type in graph.graph[i]["links"]]
+												  if graph.graph[i]["links"]
+												  else [torch.zeros((self.d2, 1))]
+												  ))
+			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
+			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
+			#print(f"   new length of ents_with_new_information: {len(ents_with_new_information)}") #CLEANUP
+			#print(f"   shape of this element: {ents_with_new_information[-1].shape}") #CLEANUP
+		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
+		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8
 
-		return torch.stack(E_t).squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
+		return E_t.squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
 
-	def graph2doc(self, entity_embs):
+	def graph2doc(self, entity_embs, bin_M, context_emb):
 		"""
 		#TODO update docstring
 		This implements Graph to Document Flow (section 3.4, last paragraph).
@@ -189,8 +198,8 @@ class FusionBlock(nn.Module):
 		"""
 
 		# unsqueeze to represent the batch
-		emb_info = torch.matmul(self.bin_M, entity_embs).unsqueeze(0) # (M, N) x (N, d2) -> (M, d2) -> (1, M, d2)
-		input = torch.cat((self.context_emb.unsqueeze(0), emb_info), dim=-1) # (1, M, 2d2)
+		emb_info = torch.matmul(bin_M, entity_embs).unsqueeze(0) # (M, N) x (N, d2) -> (M, d2) -> (1, M, d2)
+		input = torch.cat((context_emb.unsqueeze(0), emb_info), dim=-1) # (1, M, 2d2)
 		output, hidden_states = self.g2d_layer(input) # (1, M, d2) # formula 10
 
 		return output.squeeze(0)

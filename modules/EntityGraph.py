@@ -10,6 +10,8 @@ from flair.models import SequenceTagger
 import numpy as np
 import torch
 
+from pprint import pprint
+
 class EntityGraph():
     """
     Make an entity graph from a context (i.e., a list of paragraphs (i.e., a list
@@ -37,7 +39,7 @@ class EntityGraph():
     A call to the object with one or more IDs will return a sub-graph.
     """
 
-    def __init__(self, context=None, tagger='flair', max_nodes=40):
+    def __init__(self, context=None, context_length=512, tagger='flair', max_nodes=40):
         """
         Initialize a graph object with a 'context'.
         A context is a list of paragraphs and each paragraph is a 2-element list
@@ -46,7 +48,7 @@ class EntityGraph():
         Graph nodes are identified by NER; either by flair or by StanfordCoreNLP.
 
         :param context: one or more paragraphs of text
-        :type context: list[ list[ str, list[str] ] ]
+        :type context: list[ list[ list[int], list[int] ] ]
         :param tagger: one of 'flair' or 'stanford'
         :type tagger: str
         :type max_nodes: int
@@ -67,14 +69,14 @@ class EntityGraph():
             ]
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        self.tokens = self.tokenizer.tokenize(self.flatten_context())
+        self.tokens = self.tokenizer.tokenize(self.flatten_context())[:context_length] # trim to exact length
 
         self.graph = {}
         self.discarded_nodes = {}
 
         self._find_nodes(tag_with=tagger)
         self._connect_nodes()
-        self._add_entity_spans()
+        #self._add_entity_spans() #CLEANUP because it's probably never used and just causes an error
         self.prune(max_nodes) # requires entity links
         self.M = self.entity_matrix(add_token_mapping_to_graph=True) # a tensor
 
@@ -82,11 +84,14 @@ class EntityGraph():
         result = f""
         for id, node in self.graph.items():
             result += f"{id}\n" + \
-                      f"   mention:      {node['mention']}\n"+ \
-                      f"   address:      {node['address']}\n"+ \
-                      f"   context_span: {node['context_span']}\n" + \
-                      f"   token_ids:    {node['token_ids']}\n" + \
+                      f"   mention:      {node['mention']}\n" + \
+                      f"   address:      {node['address']}\n" + \
                       f"   links:        {node['links']}\n"
+            #result += f"{id}\n" + \ # TODO change this so that it checks whether graph has token_ids
+            #          f"   mention:      {node['mention']}\n" + \
+            #          f"   address:      {node['address']}\n" + \
+            #          f"   token_ids:    {node['token_ids']}\n" + \
+            #          f"   links:        {node['links']}\n"
         return result.rstrip()
 
     def __call__(self, *IDs):
@@ -206,7 +211,7 @@ class EntityGraph():
                     self.graph[k1]["links"].append((k2, 2))
                     self.graph[k2]["links"].append((k1, 2))
 
-    def _add_entity_spans(self):
+    def _add_entity_spans(self): #TODO CLEANUP because this is parobably never used!
         """
         Map each entity onto their character span at the scope of the whole
         context. This assumes that each sentence/paragraph is separated with
@@ -237,51 +242,74 @@ class EntityGraph():
 
     def entity_matrix(self, add_token_mapping_to_graph=False):
         """
+        # TODO update docstring?
         Create a mapping (and subsequently, the matrix M) from entity IDs to
         token IDs, having used BertTokenizer for tokenization. If specified,
         the mapping is added to the graph's nodes (under the key 'token_ids').
         :return: torch.Tensor of shape (#tokens, #entities) -- the matrix M
         """
 
+        #TODO clean up this mess! :P
+
         """ preparations """
         # set up the variables for the loop
         entity_stack = sorted([(id, node['mention']) for id,node in self.graph.items()])
-        in_ent = False
+        multiword_index = 0
         accumulated_string = ""
         acc_count = 0
-        # prepare the first entity
-        entity = entity_stack.pop(0) # tuple: (ID, entity_string)
-        entity = (entity[0], entity[1].lower().split())
-        assert type(entity[1]) is list
+
+        #print(f"entity_stack:") #CLEANUP
+        #pprint(f"{entity_stack}")  # CLEANUP
 
         mapping = {}  # this will contain the result:  {ID:[token_nums]}
 
-        """ map node IDs to token indices """
+        # ====================================
+
+        entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+        entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+        ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
+        assert type(entity[1]) is list
+        #print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+
+        all_chars = ""
         for i, t in enumerate(self.tokens):
+            #print(f"#===== new token (i, t): {i} {t}") #CLEANUP
 
-            if t.startswith("##"): # append the wordpiece to the previous token
-                accumulated_string += t.strip("#") # add the current token, but without '##'
-                acc_count += 1
-            else: # nothing special happens.
-                accumulated_string = t
-                acc_count = 1
+            all_chars += t.strip("#")
+            #print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
 
-            if in_ent and t not in entity[1]: # switch back to out-of-entity mode
-                in_ent = False
-                if entity_stack:
-                    entity = entity_stack.pop(0) # fetch the next entity
-                    entity = (entity[0], entity[1].lower().split())
-                    assert type(entity[1]) is list
+            if all_chars.endswith(ent_chars): # ent_chars = "henrileconte" # we found something!
+                #print(f"   found an entity: {ent_chars}")  # CLEANUP
+                tok_num = 0
+                query = ""
+                while query != ent_chars: # ent_chars = "henrileconte"    query = "henrileconte"
+                    #print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
+                    query = self.tokens[i-tok_num].strip("#") + query # grow a string backwards
+                    tok_num += 1 # count up the number of tokens needed to build ent_chars
+                    #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
 
-            if accumulated_string in entity[1]:
-                # add all the accumulated token positions to the entity's entry
                 if entity[0] not in mapping: # new entry with the ID as key
-                    mapping[entity[0]] = [i-acc for acc in range(acc_count)]
+                    mapping[entity[0]] = [i-x for x in range(tok_num)]
+                    #print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
                 else:
-                    mapping[entity[0]].extend([i-acc for acc in range(acc_count)])
-                in_ent = True # we may be inside a multi-word entity
+                    mapping[entity[0]].extend([i-x for x in range(tok_num)])
+
+                if entity_stack: # avoid empty stack errors
+                    entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+                    entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+                    ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
+                    assert type(entity[1]) is list
+                    #print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+
+
+        #pprint(self.context) #CLEANUP
+        #print(self)  # CLEANUP
 
         mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
+
+        #for id, toks in mapping.items():
+            #print(id, [self.tokens[t] for t in toks]) #CLEANUP
+
 
         # add the mapping of entity to token numbers to the graph's nodes
         if add_token_mapping_to_graph:
@@ -290,9 +318,9 @@ class EntityGraph():
 
         """ create binary matrix from the mapping """
         M = np.zeros((len(self.tokens), len(mapping)), dtype="float32")
-        for node,tokens in mapping.items():
-            for tok in tokens:
-                M[tok][node] = 1
+        for n_i, (node,tokens) in enumerate(mapping.items()):
+            for t_i, token in enumerate(tokens):
+                M[t_i][n_i] = 1
 
         return torch.from_numpy(M)
 

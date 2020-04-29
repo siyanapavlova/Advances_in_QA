@@ -15,7 +15,10 @@ from torch import nn
 import torch
 from torch import functional as F
 from torch.nn import functional as nnF
+import string
+import difflib
 
+from pprint import pprint
 
 def loop_input(rtype=str, default=None, msg=""):
     """
@@ -115,7 +118,15 @@ class ConfigReader():
         if not paramnames: # return the whole config
             return self.params
         else: # return specified values
-            values = [self.params[n] if n in self.params else None for n in paramnames]
+            values = []
+            for n in paramnames:
+                if n in self.params:
+                    values.append(self.params[n])
+                else:
+                    print(f"WARNING: couldn't find parameter {n}.")
+                    print(f"   Make sure to include it in {self.filepath}")
+                    print(f"   Continuing with value {None} for {n}")
+                    values.append(None)
             return values[0] if len(values) == 1 else values
 
     def read_config(self):
@@ -238,6 +249,7 @@ class ConfigReader():
         self.params.update({paramname:value})
 
 class Timer():
+    #TODO implement method for recurrent actions
     # TODO docstring
     def __init__(self):
         self.T0 = time()
@@ -282,7 +294,7 @@ class HotPotDataHandler():
 
     def data_for_paragraph_selector(self):
         """
-        #TODO docstring
+        # TODO docstring; mention that this is what we call 'raw_point' at other places
         Returns a list of tuples (question_id, supporting_facts, query, paragraphs, answer),
         where supporting_facts is a list of strings,
         query is a string,
@@ -303,7 +315,7 @@ class HotPotDataHandler():
 
 
 
-def make_labeled_data_for_predictor(graph, raw_point):
+def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     TODO update docstring
     Prepare labeled data for the Predictor.
@@ -315,6 +327,19 @@ def make_labeled_data_for_predictor(graph, raw_point):
         - supporting facts
         - answer
 
+    Original description:
+    For each of the o_ outputs, we need a tensor of labels in order to compute the loss.
+    This means:
+    - o_sup: look at the supporting facts and graph.context:
+        if the paragraph title is in supporting facts, fill graph.tokens with 1s for
+        the corresponding tokens (might need to use a counter)
+    - o_type: look at the answers. Each column of the label tensor is one answer type:
+        'yes' is column 0, 'no' is column 1, anything else is column 2
+    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
+        take graph.tokens and look for each token:
+        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
+        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
+
     :param graph:
     :param raw_point:
     :return sup_labels:
@@ -324,70 +349,69 @@ def make_labeled_data_for_predictor(graph, raw_point):
     """
     M = len(graph.tokens)
 
-    sup_labels = torch.zeros(M)
-    start_labels = torch.zeros(M)
-    end_labels = torch.zeros(M)
-    type_labels = torch.zeros(3)
+    sup_labels = torch.zeros(M, 2) # (context_length, classes:[0,1])
+    start_labels = torch.zeros(M, 2)
+    end_labels = torch.zeros(M, 2)
+    type_labels = torch.zeros(1, 3) # (one context, three classes)
+
+    answer = raw_point[4].lower()
 
     # get answer type
-    type_labels[0] = raw_point["answer"] == "yes"
-    type_labels[1] = raw_point["answer"] == "no"
-    type_labels[2] = raw_point["answer"] != "yes" and raw_point["answer"] != "no"
+    type_labels[:,0] = answer == "yes"
+    type_labels[:,1] = answer == "no"
+    type_labels[:,2] = answer != "yes" and answer != "no"
 
     # if the answer is not "yes" or "no", get its span
-    if type_labels[2]:
+    if type_labels[:,2]:
         for i, token in enumerate(graph.tokens):
-            if raw_point["answer"].startswith(token):
-                start_labels[i] = 1
-            if raw_point["answer"].endswith(token):
-                end_labels[i] = 1
+            if answer.startswith(token):
+                start_labels[i][1] = 1 # mark token as start by setting class 1 to 1
+            else:
+                start_labels[i][0] = 1 # mark it as not starting by setting class 0 to 1
 
+            if answer.endswith(token): # same as above for the end labels
+                end_labels[i][1] = 1
+            else:
+                end_labels[i][0] = 1
     # get supporting facts (paragraphs)
-    spans = {} # {paragraph_ID:(abs_start,abs_end)}
-    list_context = [[p[0]] + p[1] for p in context]  # squeeze header into the paragraph
-    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings
+    # spans shape: {paragraph_ID:(abs_start,abs_end)}
+    # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
+    spans = {} # dict[int:(int,int)]
+    list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
+    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings (one string per paragraph)
+    # use an extra tokenizer again in order to have the context's tokens grouped into paragraphs
+    tokenized_paragraphs = [tokenizer.tokenize(p) for p in string_paragraphs] # list[list[str]], other than graph.tokens, which is list[str]
+
+    #print(f"string_paragraphs: {string_paragraphs}") #CLEANUP
     
-    cum_pos = 0  # cumulative position counter (gets increased with each new sentence)
-    curr_paranum = 0
-    prev_end = -1 # So that that first sentence gets starts at token 0
+    curr_start = 0
+    for p_num, p_tokens in enumerate(tokenized_paragraphs):
+        curr_end = curr_start+len(p_tokens)
+        spans[p_num] = (curr_start, curr_end) # save paragraph span
+        curr_start = curr_end + 1 # move to next paragraph
 
-    accumulated_string = ""
-
-    for i, t in enumerate(graph.tokens):  # iterate from beginning to end
-        if t.startswith("##"): # append the wordpiece to the previous token
-            accumulated_string += t.strip("#") # add the current token, but without '##'
-        else: # nothing special happens.
-            accumulated_string = t
-
-        # if accumulated_string == current paragraph
-        # save paragraph span and move to next paragraph
-        if string_paragraphs[curr_paranum] == accumulated_string:
-            spans[curr_paranum] = (prev_end + 1, i)
-            accumulated_string = ""
-            prev_end = i + 1
-            curr_paranum += 1
+    #pprint(spans) #CLEANUP
 
     for i, para in enumerate(graph.context):
-        if para[0] in raw_point["supporting_facts"]:
+        #pprint(graph.context) #CLEANUP
+        if para[0] in raw_point[1]: # para title in supporting facts
             # make tokens within the span of the paragraph ones
-            sup_labels[ spans[i][0] : spans[i][1] + 1 ] = 1
+            #print("spans[i][0]",spans[i][0]) #CLEANUP
+            #print("spans[i][1] + 1",spans[i][1] + 1) #CLEANUP
+            sup_labels[ spans[i][0] : spans[i][1] + 1 ][1] = 1 # set class 1 to 1 wherever we're in a supp.fact
+        sup_labels[:,0] = 1-sup_labels[:,1] # assign the opposite value to class 0
 
-    return sup_labels, start_labels, end_labels, type_labels
+
+    # unsqueeze the labels to match the outputs of the predictor
+    #sup_labels = sup_labels.unsqueeze(-1)     # (M,2) -> (M,2,1)
+    #start_labels = start_labels.unsqueeze(-1) # (M,2) -> (M,2,1)
+    #end_labels = end_labels.unsqueeze(-1)     # (M,2) -> (M,2,1)
+    # type_labels.shape == (1, 3)
+
+    return (sup_labels, start_labels, end_labels, type_labels)
 
 
-    """
-    For each of the o_ outputs, we need a tensor of labels in order to compute the loss. 
-    This means:
-    - o_sup: look at the supporting facts and graph.context: 
-        if the paragraph title is in supporting facts, fill graph.tokens with 1s for 
-        the corresponding tokens (might need to use a counter)
-    - o_type: look at the answers. Each column of the label tensor is one answer type:
-        'yes' is column 0, 'no' is column 1, anything else is column 2
-    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
-        take graph.tokens and look for each token:
-        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
-        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
-    """
+
 
 
 
@@ -443,7 +467,7 @@ class BiDAFNet(torch.nn.Module):
         :param emb2: (batch, c_len, hidden_size)
         :return: (batch, c_len, output_size)
         """
-        #TODO implement batch size as first axis in the tensors
+        #TODO implement batch size as first axis in the tensors?
 
         # make sure that batch processing works, even for single data points
         emb1 = emb1.unsqueeze(0) if len(emb1.shape) < 3 else emb1
@@ -455,9 +479,9 @@ class BiDAFNet(torch.nn.Module):
         cq = []
         for i in range(q_len):
             qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
-            #print(f"qi: {qi.shape} \n emb1: {emb1.shape} \n emb2: {emb2.shape}") #CLEANUP
+            #print(f"i: {i}\nqi: {qi.shape} \nemb1: {emb1.shape} \nemb2: {emb2.shape}") #CLEANUP
             ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (batch, c_len, 1) --> (batch, c_len)
-            #print(f"ci: {ci.shape}") #CLEANUP
+            #print(f"ci: {ci.shape}\n") #CLEANUP
             cq.append(ci) # (q_len, batch, c_len)
         cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
 

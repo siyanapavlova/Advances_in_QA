@@ -26,14 +26,16 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 The paper describes an architecture which is split into 5 modules:
 1) **paragraph selector** returns only the most relevant paragraphs (= "the context")
 2) **graph constructor** returns an entity graph from the context
-3) **encoder** uses BERT to encode the context and the question
+3) **encoder** uses BERT to token_ids the context and the question
 4) **fusion block** – the heard of the DFGN – looks at parts of the entity graph for several iterations
 5) **LSTM prediction layer** takes the fusion block's output and returns the final answer
 
 
-### To run the paragraph selector
-python train_ps.py config/train_ps_80-20.cfg paragraph-selector
-
+### How to train the Paragraph Selector with `train_ps.py`
+Pass a configuration file and a model name for execution. The model name will be used to create a directory with all outputs (model config, model parameters, losses, times). Example:
+```
+python3 train_ps.py config/train_ps_80-20.cfg my_model
+```
 
 ### Configuration Files
 The class `ConfigReader` in the utils module can parse files in raw text format to a number of data types. The general syntax of configuration files (preferably indicated by the extension '.cfg') follows Python syntax. Here are important details:

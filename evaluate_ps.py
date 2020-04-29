@@ -4,8 +4,10 @@ from utils import HotPotDataHandler
 
 from modules import ParagraphSelector
 
+
 import argparse
 
+#TODO CLEANUP this script, because there is evaluate.py, which is more up-to-date
 if __name__=="__main__":
     
     parser = argparse.ArgumentParser()

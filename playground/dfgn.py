@@ -1,6 +1,7 @@
 """
-This script puts together all modules.
+Some play-around code for putting things together.
 """
+#TODO CLEANUP this file? It's like train_dfgn.py, but in old.
 
 import utils
 from modules.ParagraphSelector import ParagraphSelector
@@ -36,10 +37,11 @@ for datapoint in data:
                         tagger=cfg("eg_tagger"),
                         max_nodes=cfg("eg_max_nodes"))
     avg_degrees += graph.avg_degree() # for evaluation purposes
+    print(f"overall average degree in the graph: {sum(avg_degrees) / len(avg_degrees)}")
 
     """ Encoder """
     # q = query, c = context
-    q_encoded, c_encoded = enc.encode(query, context) #TODO does this call the encoder correctly?
+    q_encoded, c_encoded = enc.token_ids(query, context) #TODO does this call the encoder correctly?
 
     """ Fusion Block """
     M = graph.M
@@ -55,4 +57,3 @@ for datapoint in data:
 
 
 #evaluare the average degree
-print(f"overall average degree in the graph: {sum(avg_degrees)/len(avg_degrees)}")

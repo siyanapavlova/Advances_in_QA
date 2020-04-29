@@ -56,7 +56,7 @@ def make_training_data(data,
             point_string = point[2] + " [SEP] " + ("").join(para[1])
             
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = tokenizer.encode(point_string, max_length=512)
+            token_ids = tokenizer.token_ids(point_string, max_length=512)
             
             # Add padding if there are fewer than text_length tokens,
             # else trim to text_length
@@ -402,8 +402,8 @@ class ParagraphSelector():
 
         for p in datapoint[3]:
             # automatically prefixes [CLS] and appends [SEP]
-            token_ids = self.tokenizer.encode(datapoint[2] + " [SEP] " + ("").join(p[1]),
-                                              max_length=512)
+            token_ids = self.tokenizer.token_ids(datapoint[2] + " [SEP] " + ("").join(p[1]),
+                                                 max_length=512)
 
             # Add padding if there are fewer than text_length tokens,
             # else trim to text_length
