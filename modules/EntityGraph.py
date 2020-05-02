@@ -3,12 +3,13 @@ This class implements the Entity Graph Constructor from the paper, section 3.2
 """
 
 import sys
+import torch
 from pycorenlp import StanfordCoreNLP
 from transformers import BertTokenizer
+import flair
 from flair.data import Sentence
 from flair.models import SequenceTagger
 import numpy as np
-import torch
 
 from pprint import pprint
 
@@ -39,7 +40,7 @@ class EntityGraph():
     A call to the object with one or more IDs will return a sub-graph.
     """
 
-    def __init__(self, context=None, context_length=512, tagger='flair', max_nodes=40):
+    def __init__(self, context=None, context_length=512, tagger=None, max_nodes=40):
         """
         Initialize a graph object with a 'context'.
         A context is a list of paragraphs and each paragraph is a 2-element list
@@ -49,7 +50,7 @@ class EntityGraph():
 
         :param context: one or more paragraphs of text
         :type context: list[ list[ list[int], list[int] ] ]
-        :param tagger: one of 'flair' or 'stanford'
+        :param tagger: a flair.SequenceTagger object; defaults to this.
         :type tagger: str
         :type max_nodes: int
         """
@@ -68,13 +69,15 @@ class EntityGraph():
                   " Mary, however liked Tony even more than we do."]]
             ]
 
+        #print(f"in EntityGraph.init(): context: {self.context}") #CLEANUP
+
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.tokens = self.tokenizer.tokenize(self.flatten_context())[:context_length] # trim to exact length
 
         self.graph = {}
         self.discarded_nodes = {}
 
-        self._find_nodes(tag_with=tagger)
+        self._find_nodes(tagger)
         self._connect_nodes()
         #self._add_entity_spans() #CLEANUP because it's probably never used and just causes an error
         self.prune(max_nodes) # requires entity links
@@ -109,15 +112,17 @@ class EntityGraph():
                 result[i] = {"INVALID_ID":i}
         return result
 
-    def _find_nodes(self, tag_with='flair'):
+    def _find_nodes(self, tag_with):
         """
         Apply NER to extract entities and their positional information from the
         context.
         When working with flair, a heuristic is used to counteract cases
         in which an entity contains trailing punctuation (this would conflict
         with BertTokenizer later on).
+        #TODO update docstring
         :param tag_with: one of 'stanford' or 'flair'
         :type tag_with: str
+        #TODO clean up the stanford tagger? Make the 'tag_with' stuff (str vs. obj) clearer!
         """
         ent_id = 0
 
@@ -141,8 +146,8 @@ class EntityGraph():
                                              }
                         ent_id += 1
 
-        elif tag_with == 'flair':
-            tagger = SequenceTagger.load('ner')
+        elif type(tag_with) == SequenceTagger:
+            tagger = tag_with
             for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
                 # merge header and sentences to one list and convert to Sentence object
                 sentences = [Sentence(s) for s in [paragraph[0]] + paragraph[1]]
@@ -167,10 +172,9 @@ class EntityGraph():
                                        }
                             })
                         ent_id += 1
-
         else:
-            print(f"ERROR: invalid tagger {tag_with}. Continuing with 'flair'")
-            self._find_nodes(tag_with='flair')
+            print(f"invalid tagger; {tag_with}. Continuing with a flair tagger.")
+            self._find_nodes(SequenceTagger.load('ner'))
 
     def _connect_nodes(self):
         """
@@ -255,64 +259,69 @@ class EntityGraph():
         # set up the variables for the loop
         entity_stack = sorted([(id, node['mention']) for id,node in self.graph.items()])
         multiword_index = 0
-        accumulated_string = ""
+        accumulated_string = "" #CLEANUP the unused variables
         acc_count = 0
 
-        #print(f"entity_stack:") #CLEANUP
-        #pprint(f"{entity_stack}")  # CLEANUP
+        #print(f"In EntityGraph.entity_matrix(): \ncontext: {self.context}")  # CLEANUP
+        #print(f"entity_stack: {entity_stack}") #CLEANUP
 
         mapping = {}  # this will contain the result:  {ID:[token_nums]}
 
         # ====================================
+        if entity_stack: # only 'populate' the mapping if there are any entities!
+            entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+            entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+            ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
+            assert type(entity[1]) is list
+            #print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
 
-        entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
-        entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
-        ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
-        assert type(entity[1]) is list
-        #print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+            all_chars = ""
+            for i, t in enumerate(self.tokens):
+                #print(f"#===== new token (i, t): {i} {t}") #CLEANUP
 
-        all_chars = ""
-        for i, t in enumerate(self.tokens):
-            #print(f"#===== new token (i, t): {i} {t}") #CLEANUP
+                all_chars += t.strip("#")
+                #print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
 
-            all_chars += t.strip("#")
-            #print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
+                if all_chars.endswith(ent_chars): # ent_chars = "henrileconte" # we found something!
+                    #print(f"   found an entity: {ent_chars}")  # CLEANUP
+                    tok_num = 0
+                    query = ""
+                    while query != ent_chars: # ent_chars = "henrileconte"    query = "henrileconte"
+                        #print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
+                        query = self.tokens[i-tok_num].strip("#") + query # grow a string backwards
+                        tok_num += 1 # count up the number of tokens needed to build ent_chars
+                        #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
 
-            if all_chars.endswith(ent_chars): # ent_chars = "henrileconte" # we found something!
-                #print(f"   found an entity: {ent_chars}")  # CLEANUP
-                tok_num = 0
-                query = ""
-                while query != ent_chars: # ent_chars = "henrileconte"    query = "henrileconte"
-                    #print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
-                    query = self.tokens[i-tok_num].strip("#") + query # grow a string backwards
-                    tok_num += 1 # count up the number of tokens needed to build ent_chars
-                    #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
+                    if entity[0] not in mapping: # new entry with the ID as key
+                        mapping[entity[0]] = [i-x for x in range(tok_num)]
+                        #print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
+                    else:
+                        mapping[entity[0]].extend([i-x for x in range(tok_num)])
 
-                if entity[0] not in mapping: # new entry with the ID as key
-                    mapping[entity[0]] = [i-x for x in range(tok_num)]
-                    #print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
-                else:
-                    mapping[entity[0]].extend([i-x for x in range(tok_num)])
+                    if entity_stack: # avoid empty stack errors
+                        entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+                        entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+                        ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
+                        assert type(entity[1]) is list
+                        #print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+                    else:
+                        break
 
-                if entity_stack: # avoid empty stack errors
-                    entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
-                    entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
-                    ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
-                    assert type(entity[1]) is list
-                    #print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+            #pprint(self.context) #CLEANUP
+            #print(self)  # CLEANUP
 
+            mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
 
-        #pprint(self.context) #CLEANUP
-        #print(self)  # CLEANUP
-
-        mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
-
-        #for id, toks in mapping.items():
-            #print(id, [self.tokens[t] for t in toks]) #CLEANUP
+            #for id, toks in mapping.items():
+                #print(id, [self.tokens[t] for t in toks]) #CLEANUP
+        else:
+            pass # no entity in the stack, so we have an empty mapping
 
 
         # add the mapping of entity to token numbers to the graph's nodes
         if add_token_mapping_to_graph:
+            #print("\nself.graph.keys() =",self.graph.keys()) #CLEANUP
+            #print("mapping.keys() =", mapping.keys(),"\n") #CLEANUP
             for id in self.graph:
                 self.graph[id].update({"token_ids":mapping[id]})
 

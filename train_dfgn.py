@@ -10,6 +10,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer
 
+import flair # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 import utils
 
@@ -37,6 +38,7 @@ class DFGN(torch.nn.Module):
         :param fb_passes:
         :return:
         """
+        #print(f"in train.dfgn: device of query_ids/context_ids: {str(query_ids.device)}, {ste(context_ids.device)}") #CLEANUP
 
         # forward through encoder
         q_emb = self.encoder(context_ids, query_ids)
@@ -52,6 +54,7 @@ class DFGN(torch.nn.Module):
 
 def train(net, train_data, dev_data, model_save_path,
           ps_path, ps_threshold=0.1,
+          tagger_device='cpu', try_training_on_gpu=True,
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None,
@@ -77,6 +80,9 @@ def train(net, train_data, dev_data, model_save_path,
     para_selector = ParagraphSelector.ParagraphSelector(ps_path)
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') #TODO initialize this once only (= extract it to the main method)
 
+    flair.device = torch.device(tagger_device)
+    ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
+
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
@@ -85,7 +91,7 @@ def train(net, train_data, dev_data, model_save_path,
     # Set the network into train mode
     net.train()
 
-    cuda_is_available = torch.cuda.is_available()
+    cuda_is_available = torch.cuda.is_available() if try_training_on_gpu else False
     device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
     # put the net on the GPU if possible
     if cuda_is_available:
@@ -103,6 +109,7 @@ def train(net, train_data, dev_data, model_save_path,
 
     for epoch in range(epochs):
         print('Epoch %d/%d' % (epoch + 1, epochs))
+        lost_datapoints_log = []
 
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
             #batch = [t.to(device) if t is not None else None for t in batch] #CLEANUP?
@@ -110,13 +117,28 @@ def train(net, train_data, dev_data, model_save_path,
             """ DATA PROCESSING """
             queries = [point[2] for point in batch]
 
-            # make a list[ list[list[int], list[int]] ] for each point in the batch
+            # make a list[ list[str, list[str]] ] for each point in the batch
             contexts = [para_selector.make_context(point,
                                                    threshold=ps_threshold,
                                                    context_length=text_length)
                         for point in batch]
 
-            graphs = [EntityGraph.EntityGraph(c, context_length=text_length) for c in contexts]
+            graphs = [EntityGraph.EntityGraph(c,
+                                              context_length=text_length,
+                                              tagger=ner_tagger)
+                      for c in contexts]
+
+            # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
+            useless_datapoint_inds = [i for i,g in enumerate(graphs) if not g.graph]
+            queries = [q for i,q in enumerate(queries) if i not in useless_datapoint_inds]
+            contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
+            graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
+            lost_datapoints_log.append(len(useless_datapoint_inds)) #TODO track the batch sizes!
+            print(f"number of useless datapoints in this batch: {len(useless_datapoint_inds)}/{batch_size}") #CLEANUP
+
+            # if our batch is completely useless, just continue with the next batch. :(
+            if len(useless_datapoint_inds) == batch_size:
+                continue
 
             # turn the texts into tensors in order to put them on the GPU
             qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)] # list[ (list[int], list[int]) ]
@@ -134,7 +156,7 @@ def train(net, train_data, dev_data, model_save_path,
             #TODO is it necessary to put everything onto the GPU?
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
-            #graphs = [t.to(device) if t is not None else None for t in graphs] # this can't go onto the GPU with .to() because it's not a Tensor
+            for graph in graphs: graph.M = graph.M.to(device)
             sup_labels = [t.to(device) if t is not None else None for t in sup_labels] #TODO change this once it's done in the utils function
             start_labels = [t.to(device) if t is not None else None for t in start_labels]
             end_labels = [t.to(device) if t is not None else None for t in end_labels]
@@ -146,8 +168,7 @@ def train(net, train_data, dev_data, model_save_path,
             # As 'graph' is not a tensor, normal batch processing isn't possible
             sups, starts, ends, types = [], [], [], []
             for query, context, graph in zip(q_ids_list, c_ids_list, graphs):
-                # (M,1), (M,1), (M,1), (3,)
-                #TODO 29.04.2020 change shape to fit the labels (because we're dealing with classes, not binary stuff)
+                # (M,2), (M,2), (M,2), (3)
                 o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
                 sups.append(o_sup)
                 starts.append(o_start)
@@ -155,11 +176,10 @@ def train(net, train_data, dev_data, model_save_path,
                 types.append(o_type)
 
             """ LOSSES & BACKPROP """
-            # the stacks have shape (batch, M, 1)
             sup_loss = sum([criterion(p,l) for p,l in zip(sups, sup_labels)])
-            start_loss = criterion(torch.stack(starts), torch.stack(start_labels))
-            end_loss = criterion(  torch.stack(ends),   torch.stack(end_labels))
-            type_loss = criterion( torch.stack(types),  torch.stack(type_labels))
+            start_loss = sum([criterion(p,l) for p,l in zip(starts, start_labels)])
+            end_loss = sum([criterion(p,l) for p,l in zip(ends, end_labels)])
+            type_loss = sum([criterion(p,l) for p,l in zip(types, type_labels)])
 
             loss = start_loss + end_loss + coefs[0]*sup_loss + coefs[1]*type_loss # formula 15
 
@@ -209,9 +229,10 @@ if __name__ == '__main__':
 
     #TODO change path assignment to fit with the program
     model_abs_path = cfg('model_abs_dir') + args.model_name + "/"
+    model_filepath = model_abs_path + args.model_name
     #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else '' #CLEANUP
-    losses_abs_path = model_abs_path + args.model_name + ".losses"
-    traintime_abs_path = model_abs_path + args.model_name + ".times"
+    losses_abs_path = model_abs_path + "losses"
+    traintime_abs_path = model_abs_path + "times"
 
     # check all relevant file paths and directories before starting training
     # make sure that the training data will be found
@@ -290,8 +311,11 @@ if __name__ == '__main__':
     losses, times = train(dfgn,
                           train_data_raw, # in batches
                           dev_data_raw,
-                          model_abs_path, # where the dfgn model will be saved
+                          model_filepath, # where the dfgn model will be saved
                           ps_path=cfg("ps_model_abs_path"),
+                          ps_threshold=cfg("ps_threshold"),
+                          tagger_device=cfg("tagger_device"),
+                          try_training_on_gpu=cfg("try_training_on_gpu"),
                           fb_passes=cfg("fb_passes"),
                           coefs=(cfg("lambda_s"), cfg("lambda_t")),
                           text_length=cfg("text_length"),

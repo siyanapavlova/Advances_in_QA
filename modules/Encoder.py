@@ -61,14 +61,14 @@ class Encoder(torch.nn.Module):
         #TODO rename variables to avoid confusion!!!
 
         #TODO maybe change this in order to avoid unnecessary computing?
+        """
         if type(q_token_ids) == torch.Tensor:
             q_token_ids = q_token_ids.tolist()
         if type(c_token_ids) == torch.Tensor:
             c_token_ids = c_token_ids.tolist()
 
-        len_query = len(q_token_ids) # 20
-        len_context = len(c_token_ids) # 502, obtained from ParagraphSelector
-        # self.text_length = 500
+        len_query = len(q_token_ids)
+        len_context = len(c_token_ids) # obtained from ParagraphSelector, potentially slightly longer than self.textlength
 
         # we need to trim, otherwise (1) Bert will explode or (2) our context is longer than specified
         if len_query+len_context > MAX_LEN or len_query+len_context > self.text_length:
@@ -85,10 +85,34 @@ class Encoder(torch.nn.Module):
 
         if len_query+len_context < self.text_length: # we need to pad
             all_token_ids += [self.pad_token_id for _ in range(self.text_length - len_all)]
+        """ #CLEANUP
+
+        len_query = q_token_ids.shape[0]
+        len_context = c_token_ids.shape[0]
+
+        # we need to trim, otherwise (1) Bert will explode or (2) our context is longer than specified
+        if len_query + len_context > MAX_LEN or len_query + len_context > self.text_length:
+            cut_point = min(MAX_LEN - len_query, self.text_length)
+            if len_context >= len_query:  # trim whatever 'context' is
+                c_token_ids = c_token_ids[:cut_point]  #:self.text_length - len_query] #CLEANUP?
+                len_context = c_token_ids.shape[0]
+            else:  # trim whatever 'query' is
+                q_token_ids = q_token_ids[:cut_point]
+                len_query = q_token_ids.shape[0]
+
+        all_token_ids = torch.cat((q_token_ids, c_token_ids))
+        len_all = all_token_ids.shape[0]
+
+        # we need to pad
+        if len_query + len_context < self.text_length:
+            padding = torch.tensor([self.pad_token_id for _ in range(self.text_length - len_all)],
+                                   device=all_token_ids.device,
+                                   dtype=all_token_ids.dtype)
+            all_token_ids = torch.cat((all_token_ids, padding))
 
 
         # get the embeddings corresponding to the token IDs
-        all_hidden_states, all_attentions = self.encoder_model(torch.tensor([all_token_ids]))[-2:]
+        all_hidden_states, all_attentions = self.encoder_model(all_token_ids.unsqueeze(0))[-2:]
 
         # Next five lines:
         # This is the embedding of the context + query

@@ -234,8 +234,10 @@ class ConfigReader():
 
     @staticmethod
     def boolparse(string):
-        if string == "True" or string == "False":
-            return bool(string)
+        if string == "True":
+            return True
+        elif string == "False":
+            return False
         else:
             return string
 
@@ -345,34 +347,33 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     :return sup_labels:
     :return start_labels:
     :return end_labels:
-    :return type_labels: 
+    :return type_labels: #TODO update shapes of return values
     """
     M = len(graph.tokens)
 
-    sup_labels = torch.zeros(M, 2) # (context_length, classes:[0,1])
-    start_labels = torch.zeros(M, 2)
-    end_labels = torch.zeros(M, 2)
-    type_labels = torch.zeros(1, 3) # (one context, three classes)
+    sup_labels = torch.zeros(M, dtype=torch.long)
+    start_labels = torch.zeros(M, dtype=torch.long)
+    end_labels = torch.zeros(M, dtype=torch.long)
+    type_labels = torch.zeros(1, dtype=torch.long)
 
     answer = raw_point[4].lower()
 
     # get answer type
-    type_labels[:,0] = answer == "yes"
-    type_labels[:,1] = answer == "no"
-    type_labels[:,2] = answer != "yes" and answer != "no"
+    if answer == "yes":
+        type_labels[0] = 0
+    elif answer == "no":
+        type_labels[0] = 1
+    else:
+        type_labels[0] = 2
 
-    # if the answer is not "yes" or "no", get its span
-    if type_labels[:,2]:
+    # if the answer is not "yes" or "no", get its a span
+    if type_labels[0] == 2:
         for i, token in enumerate(graph.tokens):
             if answer.startswith(token):
-                start_labels[i][1] = 1 # mark token as start by setting class 1 to 1
-            else:
-                start_labels[i][0] = 1 # mark it as not starting by setting class 0 to 1
+                start_labels[i]=1
+            if answer.endswith(token):
+                end_labels[i]=1
 
-            if answer.endswith(token): # same as above for the end labels
-                end_labels[i][1] = 1
-            else:
-                end_labels[i][0] = 1
     # get supporting facts (paragraphs)
     # spans shape: {paragraph_ID:(abs_start,abs_end)}
     # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
@@ -382,33 +383,18 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     # use an extra tokenizer again in order to have the context's tokens grouped into paragraphs
     tokenized_paragraphs = [tokenizer.tokenize(p) for p in string_paragraphs] # list[list[str]], other than graph.tokens, which is list[str]
 
-    #print(f"string_paragraphs: {string_paragraphs}") #CLEANUP
-    
     curr_start = 0
     for p_num, p_tokens in enumerate(tokenized_paragraphs):
         curr_end = curr_start+len(p_tokens)
         spans[p_num] = (curr_start, curr_end) # save paragraph span
         curr_start = curr_end + 1 # move to next paragraph
 
-    #pprint(spans) #CLEANUP
-
     for i, para in enumerate(graph.context):
-        #pprint(graph.context) #CLEANUP
         if para[0] in raw_point[1]: # para title in supporting facts
             # make tokens within the span of the paragraph ones
-            #print("spans[i][0]",spans[i][0]) #CLEANUP
-            #print("spans[i][1] + 1",spans[i][1] + 1) #CLEANUP
-            sup_labels[ spans[i][0] : spans[i][1] + 1 ][1] = 1 # set class 1 to 1 wherever we're in a supp.fact
-        sup_labels[:,0] = 1-sup_labels[:,1] # assign the opposite value to class 0
+            sup_labels[spans[i][0]: spans[i][1] + 1] = 1
 
-
-    # unsqueeze the labels to match the outputs of the predictor
-    #sup_labels = sup_labels.unsqueeze(-1)     # (M,2) -> (M,2,1)
-    #start_labels = start_labels.unsqueeze(-1) # (M,2) -> (M,2,1)
-    #end_labels = end_labels.unsqueeze(-1)     # (M,2) -> (M,2,1)
-    # type_labels.shape == (1, 3)
-
-    return (sup_labels, start_labels, end_labels, type_labels)
+    return (sup_labels, start_labels, end_labels, type_labels) # M, M, M, 1
 
 
 

@@ -364,7 +364,7 @@ class ParagraphSelector():
         return score
     
     def make_context(self, datapoint, threshold=0.1,
-                     text_length=512, context_length=512,
+                     context_length=512, text_length=512,
                      device=torch.device('cpu')):
         """
         Given a datapoint from HotPotQA, build the context for it.
@@ -412,8 +412,7 @@ class ParagraphSelector():
         # automatically prefixes [CLS] and appends [SEP]
         query_token_ids = self.tokenizer.encode(datapoint[2],
                                                  max_length=512) # to avoid warnings
-
-        #TODO 24.4.2020 continue here: re-write to return shortened strings
+        """ SELECT PARAGRAPHS """
         for p in datapoint[3]:
             header_token_ids = self.tokenizer.encode(p[0],
                                                    max_length=512, # to avoid warnings
@@ -444,17 +443,28 @@ class ParagraphSelector():
                 # no [CLS] or [SEP] here
                 context.append([header_token_ids, sentence_token_ids])
 
+        """ TRIM EACH PARAGRAPH OF THE CONTEXT """
         # shorten each paragraph so that the combined length is not too big
         # and decode so that strings are returned
         #TODO maybe extract this to a function
         trimmed_context = []# new data structure because we prioritise computing time over memory usage
 
         cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
+        #print(f"======== PARAGRAPH SELECTOR: SHORTENING THE DAMN THING ========") #CLEANUP
+        #print(f"cut_off_point: {cut_off_point}") #CLEANUP
         for i, (header, para) in enumerate(context):
-            pos = len(header) # the header counts towards the paragraph!
-            trimmed_context.append([self.tokenizer.decode(header), []])
+
+            if len(header) >= cut_off_point:
+                trimmed_context.append([self.tokenizer.decode(header[:cut_off_point]), []])
+                #print(f"paragraph {i}: header is longer than cut_off_point! ({len(header)} vs. {cut_off_point})") #CLEANUP
+                continue # don't even look at the paragraph
+            else:
+                pos = len(header) # the header counts towards the paragraph!
+                trimmed_context.append([self.tokenizer.decode(header), []])
+                #print(f"paragraph {i}, pos: {pos}")  # CLEANUP
+
             for sentence in para:
-                #print(f"pos: {pos}   cut-off point: {cut_off_point}   tokens: {len(sentence)}") #CLEANUP
+                #print(f"   pos: {pos}   cut-off point: {cut_off_point}   tokens: {len(sentence)}") #CLEANUP
                 if pos + len(sentence) > cut_off_point:
                     s = sentence[:cut_off_point - pos] # trim
                     #print(f"   cut \n   {len(sentence)} {sentence}\n   to\n   {len(s)} {s}\n") #CLEANUP
