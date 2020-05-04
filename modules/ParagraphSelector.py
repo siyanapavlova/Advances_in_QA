@@ -23,6 +23,10 @@ from utils import HotPotDataHandler
 from utils import ConfigReader
 from utils import Timer
 
+# weights for training, because we have imbalanced data:
+# 80% of paragraphs are not important (= class 0) and 20% are important (class 1)
+WEIGHTS = [0.2, 0.8]
+
 
 def make_training_data(data,
                        text_length=512,
@@ -163,7 +167,7 @@ class ParagraphSelector():
         '''
 
     def train(self, train_data, dev_data, model_save_path,
-              epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None):
+              epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None, try_gpu=True):
         """
         Train a ParagraphSelectorNet on a training dataset.
         Binary Cross Entopy is used as the loss function.
@@ -197,7 +201,7 @@ class ParagraphSelector():
         self.net.train()
         
         
-        cuda_is_available = torch.cuda.is_available()
+        cuda_is_available = torch.cuda.is_available() if try_gpu else False
         device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
 
         # put the net on the GPU if possible
@@ -216,7 +220,7 @@ class ParagraphSelector():
         #print(f"in PS.train: shape of train_data: {len(train_data.dataset)}")  # CLEANUP
 
         c = 0  # counter over taining examples
-        best_acc = 0
+        high_score = 0
         eval_interval = eval_interval if eval_interval else float('inf')
         batched_interval = round(eval_interval/batch_size) # number of batches needed to reach eval_interval
         a_model_was_saved_at_some_point = False
@@ -227,6 +231,8 @@ class ParagraphSelector():
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 inputs, labels = batch
+                weight_tensor = torch.Tensor([WEIGHTS[int(label)] for label in labels])
+                criterion.weight = weight_tensor
                 #print(inputs.shape) #CLEANUP
 
                 optimizer.zero_grad()
@@ -239,12 +245,13 @@ class ParagraphSelector():
                 c +=1
                 # Evaluate on validation set after some iterations
                 if c % batched_interval == 0:
-                    p, r, f1, accuracy, _, _, _ = self.evaluate(dev_data)
+                    p, r, f1, accuracy, _, _, _ = self.evaluate(dev_data, try_gpu=try_gpu)
                     dev_scores.append((c/batched_interval, p, r, f1, accuracy))
 
-                    if accuracy > best_acc:
-                        print(f"Better eval found with accuracy {round(accuracy ,3)} (+{round(accuracy-best_acc, 3)})")
-                        best_acc = accuracy
+                    measure = f1
+                    if measure > high_score:
+                        print(f"Better eval found with score {round(measure ,3)} (+{round(measure-high_score, 3)})")
+                        high_score = measure
                         self.net.save_pretrained(model_save_path)
                         a_model_was_saved_at_some_point = True
                     else:
