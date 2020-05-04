@@ -25,13 +25,14 @@ from utils import Timer
 
 # weights for training, because we have imbalanced data:
 # 80% of paragraphs are not important (= class 0) and 20% are important (class 1)
-WEIGHTS = [0.2, 0.8]
+WEIGHTS = [0.2, 0.8] #CLEANUP? We implemented downscaling instead of this loss weighting
 
 
 def make_training_data(data,
                        text_length=512,
                        tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
     """
+    #TODO talk about downsampling!!! (only taking 2 of the uninformative paragraphs as negative data!)
     Make a train tensor for each datapoint.
 
     :param data: question ID, supporting facts, question, and paragraphs, 
@@ -50,27 +51,37 @@ def make_training_data(data,
                    no relevant to the query, and 1 otherwise
     """
 
+    neg_max = 2 # maximum number of useless paragraphs to be used per question
     labels = []
     datapoints = []
     for point in tqdm(data):
+        neg_counter = 0
         for para in point[3]:
-            # Label is 1: if paragraph title is in supporting facts, otherwise 0
-            labels.append(float(para[0] in point[1]))
-            point_string = point[2] + " [SEP] " + ("").join(para[1])
-            
-            # automatically prefixes [CLS] and appends [SEP]
-            token_ids = tokenizer.encode(point_string, max_length=512)
-            
-            # Add padding if there are fewer than text_length tokens,
-            # else trim to text_length
-            if len(token_ids) < text_length:
-                token_ids += [tokenizer.pad_token_id for _ in range(text_length - len(token_ids))]
-            else:
-                token_ids = token_ids[:text_length]
-            datapoints.append(token_ids)
+            is_useful_para = para[0] in point[1] # Label is 1: if paragraph title is in supporting facts, otherwise 0
+            if not is_useful_para and neg_counter == neg_max: # enough negative examples
+                continue
+            else: # useful paragraph or neg_max not yet reached
+                if not is_useful_para:
+                    neg_counter += 1
+
+                labels.append(float(is_useful_para))
+                point_string = point[2] + " [SEP] " + ("").join(para[1])
+
+                # automatically prefixes [CLS] and appends [SEP]
+                token_ids = tokenizer.encode(point_string, max_length=512)
+
+                # Add padding if there are fewer than text_length tokens,
+                # else trim to text_length
+                if len(token_ids) < text_length:
+                    token_ids += [tokenizer.pad_token_id for _ in range(text_length - len(token_ids))]
+                else:
+                    token_ids = token_ids[:text_length]
+                datapoints.append(token_ids)
+        #print(sum(labels[-4:])==2) #CLEANUP
+
     # Turn labels and datapoints into tensors and put them together        
     label_tensor = torch.tensor(labels)
-    train = torch.tensor(datapoints) 
+    train = torch.tensor(datapoints)
     train_tensor = torch.utils.data.TensorDataset(train, label_tensor)
 
     return train_tensor
@@ -231,8 +242,8 @@ class ParagraphSelector():
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 inputs, labels = batch
-                weight_tensor = torch.Tensor([WEIGHTS[int(label)] for label in labels]).to(device)
-                criterion.weight = weight_tensor
+                #weight_tensor = torch.Tensor([WEIGHTS[int(label)] for label in labels]).to(device) #CLEANUP?
+                #criterion.weight = weight_tensor #CLEANUP?
                 #print(inputs.shape) #CLEANUP
 
                 optimizer.zero_grad()
@@ -330,18 +341,17 @@ class ParagraphSelector():
             for para in point[3]: # iterate over all 10 paragraphs
                 para_true.append(para[0] in point[1]) # true if paragraph's title is in the supporting facts
                 para_pred.append(para in context)
-            all_true.append(para_true)
-            all_pred.append(para_pred)
+            all_true.extend(para_true)
+            all_pred.extend(para_pred)
             ids.append(point[0])
+            #print(f"in evaluate(): predicted: {para_true}") #CLEANUP
+            #print(f"                    true: {para_pred}\n")
+
         
-        # Flatten the lists so they can be passed to the precision and recall funtions
-        all_true_flattened = [point for para in all_true for point in para]
-        all_pred_flattened = [point for para in all_pred for point in para]
-        
-        precision = precision_score(all_true_flattened, all_pred_flattened)
-        recall = recall_score(all_true_flattened, all_pred_flattened)
-        f1 = f1_score(all_true_flattened, all_pred_flattened)
-        acc = accuracy_score(all_true_flattened, all_pred_flattened)
+        precision = precision_score(all_true, all_pred)
+        recall = recall_score(all_true, all_pred)
+        f1 = f1_score(all_true, all_pred)
+        acc = accuracy_score(all_true, all_pred)
         
         return precision, recall, f1, acc, ids, all_true, all_pred
     
