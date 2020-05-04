@@ -63,8 +63,9 @@ precision, recall, f1, accuracy, ids, y_true, y_pred = model.evaluate(raw_data[:
                                                             text_length=cfg("text_length"),
                                                             try_gpu=cfg("try_gpu"))
 print("Precision:", precision)
-print("Recall:", recall)
-print("F score:", f1)
+print("Recall:   ", recall)
+print("F score:  ", f1)
+print("Accuracy: ", accuracy)
 print('----------------------')
 take_time("evaluation")
 
@@ -79,7 +80,8 @@ with open(results_abs_path, 'w', encoding='utf-8') as f:
     f.write("Outputs in:  " + predictions_abs_path + \
             "\nPrecision: " + str(precision) + \
             "\nRecall:    " + str(recall) + \
-            "\nF score:   " + str(f1) + "\n")
+            "\nF score:   " + str(f1) +
+            "\nAccuracy:  " + str(accuracy) + "\n")
     f.write("Hyper parameters:\n" + str(cfg))
 
     take_time.total()
