@@ -112,7 +112,6 @@ def train(net, train_data, dev_data, model_save_path,
         lost_datapoints_log = []
 
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
-            #batch = [t.to(device) if t is not None else None for t in batch] #CLEANUP?
 
             """ DATA PROCESSING """
             queries = [point[2] for point in batch]
@@ -153,7 +152,6 @@ def train(net, train_data, dev_data, model_save_path,
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
 
-            #TODO is it necessary to put everything onto the GPU?
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
             for graph in graphs: graph.M = graph.M.to(device)

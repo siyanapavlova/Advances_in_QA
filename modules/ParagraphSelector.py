@@ -231,7 +231,7 @@ class ParagraphSelector():
             for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
                 batch = [t.to(device) if t is not None else None for t in batch]
                 inputs, labels = batch
-                weight_tensor = torch.Tensor([WEIGHTS[int(label)] for label in labels])
+                weight_tensor = torch.Tensor([WEIGHTS[int(label)] for label in labels]).to(device)
                 criterion.weight = weight_tensor
                 #print(inputs.shape) #CLEANUP
 
