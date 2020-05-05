@@ -344,8 +344,8 @@ class ParagraphSelector():
             all_true.append(para_true)
             all_pred.append(para_pred)
             ids.append(point[0])
-            print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
-            print(f"                    true: {para_true}\n")
+            #print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
+            #print(f"                    true: {para_true}\n")
 
         # Flatten the lists so they can be passed to the precision and recall funtions
         all_true_flattened = [point for para in all_true for point in para]
@@ -495,7 +495,7 @@ class ParagraphSelector():
                     trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
                     pos += len(sentence) # go to the next sentence
 
-        return trimmed_context, para_indices if numerated else trimmed_context
+        return (trimmed_context, para_indices) if numerated else trimmed_context
 
     def save(self, savepath):
         '''
