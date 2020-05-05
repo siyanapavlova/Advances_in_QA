@@ -344,8 +344,8 @@ class ParagraphSelector():
             all_true.append(para_true)
             all_pred.append(para_pred)
             ids.append(point[0])
-            #print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
-            #print(f"                    true: {para_true}\n")
+            print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
+            print(f"                    true: {para_true}")
 
         # Flatten the lists so they can be passed to the precision and recall funtions
         all_true_flattened = [point for para in all_true for point in para]
