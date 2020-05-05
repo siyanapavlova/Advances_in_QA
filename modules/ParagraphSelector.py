@@ -217,18 +217,12 @@ class ParagraphSelector():
 
         # put the net on the GPU if possible
         if cuda_is_available:
-            #print("in PS.train(): cuda IS available!")#CLEANUP
             self.net = self.net.to(device)
-        #else:
-            #print("in PS.train(): cuda NOT available!")#CLEANUP
 
         print("Training...")
-        
-        #TODO: find a way to shuffle reproducibly
 
         # (120, 250) --> batching --> (30, 4, 250)
         train_data = torch.utils.data.DataLoader(dataset = train_data, batch_size = batch_size, shuffle=True)
-        #print(f"in PS.train: shape of train_data: {len(train_data.dataset)}")  # CLEANUP
 
         c = 0  # counter over taining examples
         high_score = 0
@@ -344,8 +338,8 @@ class ParagraphSelector():
             all_true.append(para_true)
             all_pred.append(para_pred)
             ids.append(point[0])
-            print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
-            print(f"                    true: {para_true}")
+            #print(f"in evaluate(): true: {para_true}") #CLEANUP
+            #print(f"          predicted: {para_pred}")
 
         # Flatten the lists so they can be passed to the precision and recall funtions
         all_true_flattened = [point for para in all_true for point in para]

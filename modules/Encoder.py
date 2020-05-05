@@ -91,10 +91,10 @@ class Encoder(torch.nn.Module):
         len_context = c_token_ids.shape[0]
 
         # we need to trim, otherwise (1) Bert will explode or (2) our context is longer than specified
-        if len_query + len_context > MAX_LEN or len_query + len_context > self.text_length:
+        if (len_query + len_context > MAX_LEN) or (len_query + len_context > self.text_length):
             cut_point = min(MAX_LEN - len_query, self.text_length)
             if len_context >= len_query:  # trim whatever 'context' is
-                c_token_ids = c_token_ids[:cut_point]  #:self.text_length - len_query] #CLEANUP?
+                c_token_ids = c_token_ids[:cut_point]
                 len_context = c_token_ids.shape[0]
             else:  # trim whatever 'query' is
                 q_token_ids = q_token_ids[:cut_point]
