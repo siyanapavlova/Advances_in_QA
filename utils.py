@@ -251,8 +251,14 @@ class ConfigReader():
         self.params.update({paramname:value})
 
 class Timer():
-    #TODO implement method for recurrent actions
-    # TODO docstring
+    """
+    Simple wrapper for taking time. A Timer object starts taking time upon initialization.
+    Take time by calling the object with a description of the timed action, e.g.:
+    my_timer('preprocessing').
+    Take times of recurring activities with again().
+    Take the overall time with total().
+    The string representation outputs all times taken, or only certain times, if specified.
+    """
     def __init__(self):
         self.T0 = time()
         self.t0 = time()
@@ -271,8 +277,23 @@ class Timer():
         steps = [s for s in args if s in self.steps] if args else self.steps
         return "\n".join([str(round(self.times[k], 5)) + "   " + k for k in steps])
 
+    def again(self, periodname):
+        """
+        Take cumulative time of a recurring activity.
+        :param periodname: str -- description of the activity
+        :return: float -- time in seconds taken for current iteration of the activity
+        """
+        span = time() - self.t0
+        self.t0 = time()
+        if periodname in self.times:
+            self.times[periodname] += span
+        else:
+            self.steps.append(periodname)
+            self.times[periodname] = span
+        return span
+
     def total(self):
-        span = time() - self.T0
+        span = time() - self.T0 # with a capital T, to take the overall time
         self.steps.append("total")
         self.times.update({"total": span})
         return span
@@ -280,8 +301,7 @@ class Timer():
 class HotPotDataHandler():
     """
     This class provides an interface to the HotPotQA dataset.
-    It implements functions that tailor the required information to each module.
-    #TODO docstring
+    It loads data and extracts the required information.
     """
 
     def __init__(self, filename="./data/hotpot_train_v1.1.json"):
@@ -296,14 +316,20 @@ class HotPotDataHandler():
 
     def data_for_paragraph_selector(self):
         """
-        # TODO docstring; mention that this is what we call 'raw_point' at other places
-        Returns a list of tuples (question_id, supporting_facts, query, paragraphs, answer),
-        where supporting_facts is a list of strings,
-        query is a string,
-        paragraphs is a 10-element list where
-            the first element is a string
-            the second element is a list of sentences (i.e., a list of strings),
-        answer is a string
+        This method makes what is called "raw_point" in other parts of the project.
+
+        From the HotPotQA data, extract the required information and return it
+        as a list of tuples (question_id, supporting_facts, query, paragraphs, answer).
+        Shapes of the tuples' elements:
+        - question_id: str
+        - supporting_facts: list[str]
+        - query: str
+        - paragraphs: 10-element list[str, list[str]]
+            - first element: paragraph title
+            - second element: list of the paragraph's sentences
+        - answer: str
+
+        :return: list(tuple( str, list[str], str, list[str,list[str]], str ))
         """
         result = []
         for point in self.data:
@@ -319,8 +345,11 @@ class HotPotDataHandler():
 
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
-    TODO update docstring
-    Prepare labeled data for the Predictor.
+    Prepare labeled data for the Predictor, i.e. per-token labels for
+    1. is_supporting_fact
+    2. is_answer_start
+    3. is_answer_end
+    4. question type (not per-token; one label per datapoint)
 
     From the graph we get:
         - a list of tokens
@@ -329,25 +358,12 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
         - supporting facts
         - answer
 
-    Original description:
-    For each of the o_ outputs, we need a tensor of labels in order to compute the loss.
-    This means:
-    - o_sup: look at the supporting facts and graph.context:
-        if the paragraph title is in supporting facts, fill graph.tokens with 1s for
-        the corresponding tokens (might need to use a counter)
-    - o_type: look at the answers. Each column of the label tensor is one answer type:
-        'yes' is column 0, 'no' is column 1, anything else is column 2
-    - o_start, o_end: if o_type is 2, then find the start and the end of the span:
-        take graph.tokens and look for each token:
-        - is it at the beginning of the answer? -> start! (give it a 1 in the start labels)
-        - is it at the end of the answer? -> end! (give it a 1 in the end labels)
-
-    :param graph:
-    :param raw_point:
-    :return sup_labels:
-    :return start_labels:
-    :return end_labels:
-    :return type_labels: #TODO update shapes of return values
+    :param graph: instance of the EntityGraph class (holds context with M tokens)
+    :param raw_point: data point as returned from HotPotDataHandler.data_for_paragraph_selector()
+    :return sup_labels: Tensor of shape M -- marks tokens that are 'supporting facts'
+    :return start_labels: Tensor of shape M -- marks tokens which are start of spans
+    :return end_labels: Tensor of shape M -- marks tokens which are end of spans
+    :return type_labels: Tensor of shape 1 -- one of 3 question types (yes/no/span)
     """
     M = len(graph.tokens)
 
@@ -366,7 +382,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     else:
         type_labels[0] = 2
 
-    # if the answer is not "yes" or "no", get its a span
+    # if the answer is not "yes" or "no", its a span
     if type_labels[0] == 2:
         for i, token in enumerate(graph.tokens):
             if answer.startswith(token):
@@ -383,29 +399,29 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     # use an extra tokenizer again in order to have the context's tokens grouped into paragraphs
     tokenized_paragraphs = [tokenizer.tokenize(p) for p in string_paragraphs] # list[list[str]], other than graph.tokens, which is list[str]
 
+    # find the spans of supporting facts
     curr_start = 0
     for p_num, p_tokens in enumerate(tokenized_paragraphs):
         curr_end = curr_start+len(p_tokens)
         spans[p_num] = (curr_start, curr_end) # save paragraph span
         curr_start = curr_end + 1 # move to next paragraph
 
+    # translate the spans into the label tensor
     for i, para in enumerate(graph.context):
         if para[0] in raw_point[1]: # para title in supporting facts
             # make tokens within the span of the paragraph ones
-            sup_labels[spans[i][0]: spans[i][1] + 1] = 1
+            sup_labels[ spans[i][0] : spans[i][1]+1 ] = 1
 
     return (sup_labels, start_labels, end_labels, type_labels) # M, M, M, 1
 
 
 
 
-
-
-
 class Linear(nn.Module):
     '''
-    Linear class for the BiDAF network.
-    Source: https://github.com/galsang/BiDAF-pytorch/blob/master/utils/nn.py
+    Taken from Taeuk Kim's re-implementation of BiDAF:
+    https://github.com/galsang/BiDAF-pytorch/blob/master/utils/nn.py
+    This class is used for all layers in the BiDAF architecture.
     '''
     def __init__(self, in_features, out_features, dropout=0.0):
         super(Linear, self).__init__()
@@ -427,13 +443,12 @@ class Linear(nn.Module):
 
 class BiDAFNet(torch.nn.Module):
     """
-    TODO: write docstring
-
-    BiDAF paper: arxiv.org/pdf/1611.01603.pdf
-    There's a link to the code, but that uses TensorFlow
-
-    We adapted this implementation of the BiDAF
-    Attention Layer: https://github.com/galsang/BiDAF-pytorch
+    This class is an adaptation from a pytorch implementation of the
+    Bi-Directional Attention Flow (BiDAF) architecture described in
+    Seo et al. (2016) [https://arxiv.org/abs/1611.01603].
+    The present code is in most parts copied from model.BiDAF.att_flow_layer()
+    in Taeuk Kim's re-implementation: https://github.com/galsang/BiDAF-pytorch ,
+    and slightly adapted.
     """
 
     def __init__(self, hidden_size=768, output_size=300):
@@ -447,55 +462,50 @@ class BiDAFNet(torch.nn.Module):
 
     def forward(self, emb1, emb2, batch_processing=False):
         """
-        perform bidaf and return the updated emb2.
-        using 'q' and 'c' instead of 'emb1' and 'emb2' for readability
-        :param emb1: (batch, q_len, hidden_size)
-        :param emb2: (batch, c_len, hidden_size)
-        :return: (batch, c_len, output_size)
+        Perform bidaf and return the updated emb2.
+        This method can handle single data points as well as batches.
+        :param emb1: (batch, x_len, hidden_size)
+        :param emb2: (batch, y_len, hidden_size)
+        :return: (batch, y_len, output_size)
         """
-        #TODO implement batch size as first axis in the tensors?
 
         # make sure that batch processing works, even for single data points
         emb1 = emb1.unsqueeze(0) if len(emb1.shape) < 3 else emb1
         emb2 = emb2.unsqueeze(0) if len(emb2.shape) < 3 else emb2
 
-        q_len = emb1.size(1) # (batch, q_len, hidden_size)
-        c_len = emb2.size(1) # (batch, c_len, hidden_size)
+        x_len = emb1.size(1) # (batch, x_len, hidden_size)
+        y_len = emb2.size(1) # (batch, y_len, hidden_size)
 
-        cq = []
-        for i in range(q_len):
-            qi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
-            #print(f"i: {i}\nqi: {qi.shape} \nemb1: {emb1.shape} \nemb2: {emb2.shape}") #CLEANUP
-            ci = self.att_weight_cq(emb2 * qi).squeeze(-1) # (batch, c_len, 1) --> (batch, c_len)
-            #print(f"ci: {ci.shape}\n") #CLEANUP
-            cq.append(ci) # (q_len, batch, c_len)
-        cq = torch.stack(cq, dim=-1)  # (batch, c_len, q_len)
+        xy = []
+        for i in range(x_len):
+            xi = emb1.select(1, i).unsqueeze(1)  # (batch, 1, hidden_size)
+            yi = self.att_weight_cq(emb2 * xi).squeeze(-1) # (batch, y_len, 1) --> (batch, y_len)
+            xy.append(yi) # (x_len, batch, y_len)
+        xy = torch.stack(xy, dim=-1)  # (batch, y_len, x_len)
 
-        # (batch, c_len, q_len)
-        s = self.att_weight_c(emb2).expand(-1, -1, q_len) + \
-            self.att_weight_q(emb1).permute(0, 2, 1).expand(-1, c_len, -1) + \
-            cq
-        #print(f"s: {s.shape}") #CLEANUP
+        # (batch, y_len, x_len)
+        s = self.att_weight_c(emb2).expand(-1, -1, x_len) + \
+            self.att_weight_q(emb1).permute(0, 2, 1).expand(-1, y_len, -1) + \
+            xy
 
-        a = nnF.softmax(s, dim=2)  # (batch, c_len, q_len)
+        a = nnF.softmax(s, dim=2)  # (batch, y_len, x_len)
 
-        # (batch, c_len, q_len) * (batch, q_len, hidden_size) -> (batch, c_len, hidden_size)
-        c2q_att = torch.bmm(a, emb1)
+        # (batch, y_len, x_len) * (batch, x_len, hidden_size) -> (batch, y_len, hidden_size)
+        y2x_att = torch.bmm(a, emb1)
 
-        #print(f"s: {s.shape}") #CLEANUP #TODO continue here with working without batches
-        #TODO or just work with batches.
-        b = nnF.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1) # (batch, 1, c_len)
+        b = nnF.softmax(torch.max(s, dim=2)[0], dim=1).unsqueeze(1) # (batch, 1, y_len)
 
-        # (batch, 1, c_len) * (batch, c_len, hidden_size) -> (batch, hidden_size)
-        q2c_att = torch.bmm(b, emb2).squeeze(1)
+        # (batch, 1, y_len) * (batch, y_len, hidden_size) -> (batch, hidden_size)
+        x2y_att = torch.bmm(b, emb2).squeeze(1)
 
-        # (batch, c_len, hidden_size) (tiled)
-        q2c_att = q2c_att.unsqueeze(1).expand(-1, c_len, -1)
+        # (batch, y_len, hidden_size) (tiled)
+        x2y_att = x2y_att.unsqueeze(1).expand(-1, y_len, -1)
 
-        # (batch, c_len, hidden_size * 4)
-        x = torch.cat([emb2, c2q_att, emb2 * c2q_att, emb2 * q2c_att], dim=-1)
-        x = self.reduction_layer(x)  # (batch, c_len, output_size)
-        return x.squeeze(0) if not batch_processing else x # (c_len, output_size) if no batch_processing
+        # (batch, y_len, hidden_size * 4)
+        z = torch.cat([emb2, y2x_att, emb2 * y2x_att, emb2 * x2y_att], dim=-1)
+        z = self.reduction_layer(z)  # (batch, y_len, output_size)
+
+        return z.squeeze(0) if not batch_processing else z # (y_len, output_size) if no batch_processing
 
 
 

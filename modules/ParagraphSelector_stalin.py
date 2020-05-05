@@ -445,7 +445,7 @@ if __name__ == "__main__":
 
     cfg = ConfigReader(args.config_file)
 
-    dataset_size = cfg("dataset_size")
+    dataset_size = cfg("training_dataset_size")
     test_split = cfg("test_split")
     shuffle_seed = cfg("shuffle_seed")
     text_length = cfg("text_length") # limits paragraph length in order to reduce complexity

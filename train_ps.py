@@ -53,27 +53,28 @@ if __name__ == '__main__':
 
 
     # ========== DATA PREPARATION
-    # TODO add comments
-    # TODO improve variable/parameter names
+    # For training, load data from the HotPotQA training set (or a subset that was
+    # previously pickled) and split off some data for evaluation during training.
+    # The HotPotQA dev set is reserved for evaluation and thus not used here.
 
     # try to load pickled data, and in case it doesn't work, read the whole HotPotQA dataset
     try:
         with open(cfg("pickled_train_data"), "rb") as f:
             train_data_raw = pickle.load(f)
-            dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(train_data_raw)
+            training_dataset_size = cfg("training_dataset_size") if cfg("training_dataset_size") else len(train_data_raw)
         with open(cfg("pickled_dev_data"), "rb") as f:
             dev_data_raw = pickle.load(f)
             # restrict loaded dev data to the required percentage
-            dev_data_raw = dev_data_raw[:int(cfg('percent_for_eval_during_training') * dataset_size)]
+            dev_data_raw = dev_data_raw[:int(cfg('percent_for_eval_during_training') * training_dataset_size)]
 
     except:  # TODO why does it always go to this exception instead of loading the pickled data?
         print(f"Reading data from {cfg('data_abs_path')}...")  # the whole HotPotQA training set
         dh = HotPotDataHandler(cfg("data_abs_path"))
-        data = dh.data_for_paragraph_selector()  # get raw points
-        dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(data)
+        data_raw = dh.data_for_paragraph_selector()  # get raw points
+        training_dataset_size = cfg("training_dataset_size") if cfg("training_dataset_size") else len(data_raw)
 
         print("Splitting data...")  # split into what we need DURING training
-        train_data_raw, dev_data_raw = train_test_split(data[:dataset_size],
+        train_data_raw, dev_data_raw = train_test_split(data_raw[:training_dataset_size],
                                                         # restricts the number of training+dev examples
                                                         test_size=cfg('percent_for_eval_during_training'),
                                                         random_state=cfg('shuffle_seed'),
@@ -116,9 +117,7 @@ if __name__ == '__main__':
                           try_gpu=cfg("try_gpu"))
     take_time(f"training")
 
-    # print(f"Saving model in {model_abs_path}...")
-    # ps.save(model_abs_path)
-
+    #========== LOGGING
     print(f"Saving losses in {losses_abs_path}...")
     with open(losses_abs_path, "w") as f:
         f.write("\n".join([str(l) for l in losses]))

@@ -325,33 +325,36 @@ class ParagraphSelector():
         all_pred = []
         ids = []
 
-        # TODO maybe put the model onto the GPU here instead of in make_context?
         self.net.eval()
         device = torch.device('cuda') if try_gpu and torch.cuda.is_available() \
             else torch.device('cpu')
         self.net = self.net.to(device)
 
         for point in tqdm(data, desc="eval points"):
-            context = self.make_context(point,
-                                        threshold=threshold,
-                                        text_length=text_length,
-                                        device=device) #point[2] are the paragraphs, point[1] is the query
+            context, c_indices = self.make_context(point, #point[2] are the paragraphs, point[1] is the query
+                                                   threshold=threshold,
+                                                   text_length=text_length,
+                                                   device=device,
+                                                   numerated=True) # returns original paragraph numbers
             para_true = []
             para_pred = []
-            for para in point[3]: # iterate over all 10 paragraphs
-                para_true.append(para[0] in point[1]) # true if paragraph's title is in the supporting facts
-                para_pred.append(para in context)
-            all_true.extend(para_true)
-            all_pred.extend(para_pred)
+            for i, para in enumerate(point[3]): # iterate over all 10 paragraphs
+                para_true.append(para[0] in point[1]) # True if paragraph's title is in the supporting facts
+                para_pred.append(i in c_indices) # compare indices instead of strings to avoid mismatches due to trimming
+            all_true.append(para_true)
+            all_pred.append(para_pred)
             ids.append(point[0])
-            #print(f"in evaluate(): predicted: {para_true}") #CLEANUP
-            #print(f"                    true: {para_pred}\n")
+            print(f"in evaluate(): predicted: {para_pred}") #CLEANUP
+            print(f"                    true: {para_true}\n")
 
+        # Flatten the lists so they can be passed to the precision and recall funtions
+        all_true_flattened = [point for para in all_true for point in para]
+        all_pred_flattened = [point for para in all_pred for point in para]
         
-        precision = precision_score(all_true, all_pred)
-        recall = recall_score(all_true, all_pred)
-        f1 = f1_score(all_true, all_pred)
-        acc = accuracy_score(all_true, all_pred)
+        precision = precision_score(all_true_flattened, all_pred_flattened)
+        recall = recall_score(all_true_flattened, all_pred_flattened)
+        f1 = f1_score(all_true_flattened, all_pred_flattened)
+        acc = accuracy_score(all_true_flattened, all_pred_flattened)
         
         return precision, recall, f1, acc, ids, all_true, all_pred
     
@@ -382,7 +385,8 @@ class ParagraphSelector():
     
     def make_context(self, datapoint, threshold=0.1,
                      context_length=512, text_length=512,
-                     device=torch.device('cpu')):
+                     device=torch.device('cpu'),
+                     numerated=False):
         """
         Given a datapoint from HotPotQA, build the context for it.
         The context consists of all paragraphs included in that
@@ -424,13 +428,14 @@ class ParagraphSelector():
 
 
         context = []
+        para_indices = []
 
         # encode header and paragraph individually to be able to join just paragraphs
         # automatically prefixes [CLS] and appends [SEP]
         query_token_ids = self.tokenizer.encode(datapoint[2],
                                                  max_length=512) # to avoid warnings
         """ SELECT PARAGRAPHS """
-        for p in datapoint[3]:
+        for i, p in enumerate(datapoint[3]):
             header_token_ids = self.tokenizer.encode(p[0],
                                                    max_length=512, # to avoid warnings
                                                    add_special_tokens=False)
@@ -459,33 +464,29 @@ class ParagraphSelector():
                 # list[list[int], list[list[int]]]
                 # no [CLS] or [SEP] here
                 context.append([header_token_ids, sentence_token_ids])
+                para_indices.append(i)
+
 
         """ TRIM EACH PARAGRAPH OF THE CONTEXT """
         # shorten each paragraph so that the combined length is not too big
         # and decode so that strings are returned
         #TODO maybe extract this to a function
-        trimmed_context = []# new data structure because we prioritise computing time over memory usage
-
+        trimmed_context = [] # new data structure because we prioritise computing time over memory usage
         cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
-        #print(f"======== PARAGRAPH SELECTOR: SHORTENING THE DAMN THING ========") #CLEANUP
-        #print(f"cut_off_point: {cut_off_point}") #CLEANUP
+
         for i, (header, para) in enumerate(context):
 
             if len(header) >= cut_off_point:
                 trimmed_context.append([self.tokenizer.decode(header[:cut_off_point]), []])
-                #print(f"paragraph {i}: header is longer than cut_off_point! ({len(header)} vs. {cut_off_point})") #CLEANUP
                 continue # don't even look at the paragraph
             else:
                 pos = len(header) # the header counts towards the paragraph!
                 trimmed_context.append([self.tokenizer.decode(header), []])
-                #print(f"paragraph {i}, pos: {pos}")  # CLEANUP
 
             for sentence in para:
-                #print(f"   pos: {pos}   cut-off point: {cut_off_point}   tokens: {len(sentence)}") #CLEANUP
-                if pos + len(sentence) > cut_off_point:
-                    s = sentence[:cut_off_point - pos] # trim
-                    #print(f"   cut \n   {len(sentence)} {sentence}\n   to\n   {len(s)} {s}\n") #CLEANUP
-                    s = self.tokenizer.decode(s) # re-convert to a string
+                if pos + len(sentence) > cut_off_point: # we need to trim
+                    s = sentence[:cut_off_point - pos]
+                    s = self.tokenizer.decode(s) # re-convert token IDs to strings
                     if len(s) != 0:
                         trimmed_context[i][1].append(s)
                     break # don't continue to loop over further sentences of this paragraph
@@ -494,11 +495,7 @@ class ParagraphSelector():
                     trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
                     pos += len(sentence) # go to the next sentence
 
-        #print(f"roughly trimmed context:") #CLEANUP
-        #pprint(trimmed_context) #CLEANUP
-        #print("\n\n") #CLEANUP
-
-        return trimmed_context
+        return trimmed_context, para_indices if numerated else trimmed_context
 
     def save(self, savepath):
         '''
@@ -524,7 +521,7 @@ if __name__ == "__main__":
 
     cfg = ConfigReader(args.config_file)
 
-    dataset_size = cfg("dataset_size")
+    dataset_size = cfg("training_dataset_size")
     test_split = cfg("test_split")
     shuffle_seed = cfg("shuffle_seed")
     text_length = cfg("text_length") # limits paragraph length in order to reduce complexity

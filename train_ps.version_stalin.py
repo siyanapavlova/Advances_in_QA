@@ -55,7 +55,7 @@ if __name__ == '__main__':
         take_time("data loading")
 
         print("Splitting data...")
-        data_limit = cfg("dataset_size") if cfg("dataset_size") else len(data)
+        data_limit = cfg("training_dataset_size") if cfg("training_dataset_size") else len(data)
         train_data_raw, test_data_raw = train_test_split(data[:data_limit],
                                                          test_size=cfg('test_split'),
                                                          random_state=cfg('shuffle_seed'),

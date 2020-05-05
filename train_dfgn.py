@@ -251,33 +251,28 @@ if __name__ == '__main__':
 
 
     #========== DATA PREPARATION
-    #TODO add comments
-    #TODO improve variable/parameter names
+    # For training, load data from the HotPotQA training set (or a subset that was
+    # previously pickled) and split off some data for evaluation during training.
+    # The HotPotQA dev set is reserved for evaluation and thus not used here.
 
     # try to load pickled data, and in case it doesn't work, read the whole HotPotQA dataset
     try:
         with open(cfg("pickled_train_data"), "rb") as f:
             train_data_raw = pickle.load(f)
-            dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(train_data_raw)
+            training_dataset_size = cfg("training_dataset_size") if cfg("training_dataset_size") else len(train_data_raw)
         with open(cfg("pickled_dev_data"), "rb") as f:
             dev_data_raw = pickle.load(f)
             # restrict loaded dev data to the required percentage
-            dev_data_raw = dev_data_raw[:cfg('percent_for_eval_during_training') * dataset_size]
+            dev_data_raw = dev_data_raw[:cfg('percent_for_eval_during_training') * training_dataset_size]
 
     except: #TODO why does it always go to this exception instead of loading the pickled data?
         print(f"Reading data from {cfg('data_abs_path')}...") # the whole HotPotQA training set
         dh = utils.HotPotDataHandler(cfg("data_abs_path"))
-        data = dh.data_for_paragraph_selector() # get raw points
-        dataset_size = cfg("dataset_size") if cfg("dataset_size") else len(data)
-
-        #CLEANUP the following as we only use the dev set for final evaluation
-        #dev_dh = utils.HotPotDataHandler(cfg("dev_data_abs_path")) # the whole HotPotQA dev set
-        #dev_data = dev_dh.data_for_paragraph_selector() # get raw points
-        #dev_data_limit = cfg("dev_data_limit") if cfg("dev_data_limit") else len(dev_data)
-        #take_time("data loading")
+        raw_data = dh.data_for_paragraph_selector() # get raw points
+        training_dataset_size = cfg("training_dataset_size") if cfg("training_dataset_size") else len(raw_data)
 
         print("Splitting data...") # split into what we need DURING training
-        train_data_raw, dev_data_raw = train_test_split(data[:dataset_size],  # restricts the number of training+dev examples
+        train_data_raw, dev_data_raw = train_test_split(raw_data[:training_dataset_size],  # restricts the number of training+dev examples
                                                         test_size=cfg('percent_for_eval_during_training'),
                                                         random_state=cfg('shuffle_seed'),
                                                         shuffle=True)
