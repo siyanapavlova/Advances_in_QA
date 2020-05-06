@@ -1,20 +1,19 @@
 Configuration in: config/eval_ps.cfg
 Outputs in:  /local/simonp/AQA/data_in_QA/predictions/PS_final_2020-05-05.predicitons
-Precision: 0.7710892710892711
-Recall:    0.9415
-F score:   0.8478162989644306
-Accuracy:  0.931902891105067
+Precision: 0.7792128263653064
+Recall:    0.9451046590141796
+F score:   0.8541787446983797
+Accuracy:  0.9351560379918589
 Hyper parameters:
 dev_data_abs_path	/local/simonp/data/hotpot_dev_distractor_v1.json
 model_abs_dir	/local/simonp/AQA/data_in_QA/models/
 predictions_abs_dir	/local/simonp/AQA/data_in_QA/predictions/
 try_gpu	True
-testset_size	1000
 threshold	0.1
 text_length	250
 
 Times taken:
-0.0017   parameter input
-3.41593   data  loading
-189.92086   evaluation
-193.34481   total
+0.00176   parameter input
+3.41521   data  loading
+1444.58943   evaluation
+1448.04846   total
