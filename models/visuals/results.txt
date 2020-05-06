@@ -1,0 +1,12 @@
+Outputs in: /home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/models/performance/outputs.txt
+Precision: 0.2
+Recall: 1.0
+F score: 0.33333333333333337
+
+Times taken:
+4.51038   data_input
+4.64691   data_splitting
+23.06484   training
+23.61846   saving_model
+26.91927   evaluation
+26.91947   total

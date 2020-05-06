@@ -4,7 +4,10 @@ config/local.cfg
 
 data/
 
-models/
+models/*
+!models/outputs/
+!models/visuals/
+
 
 __pycache__
 

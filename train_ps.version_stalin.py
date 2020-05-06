@@ -36,8 +36,8 @@ if __name__ == '__main__':
 
     model_abs_path = cfg('model_abs_dir') + args.save_model
     model_abs_path += '.pt' if not args.save_model.endswith('.pt') else ''
-    losses_abs_path = cfg("model_abs_dir") + "performance/" + args.save_model + ".losses"
-    traintime_abs_path = cfg("model_abs_dir") + "performance/" + args.save_model + ".times"
+    losses_abs_path = cfg("model_abs_dir") + "visuals/" + args.save_model + ".losses"
+    traintime_abs_path = cfg("model_abs_dir") + "visuals/" + args.save_model + ".times"
     take_time("parameter input")
 
 

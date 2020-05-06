@@ -1,0 +1,23 @@
+Configuration in: config/local_train_ps.cfg
+data_abs_path	/home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/data/hotpot_train_v1.1.json
+dev_data_abs_path	/home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/data/hotpot_dev_distractor_v1.json
+model_abs_dir	/home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/data_in_QA/models/
+pickled_train_data	/home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/data/pickled/train
+pickled_dev_data	/home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/data/pickled/dev
+bert_model_path	bert-base-uncased
+dataset_size	12
+dev_data_limit	5
+test_split	0.2
+shuffle_seed	42
+text_length	250
+epochs	1
+batch_size	4
+learning_rate	1e-05
+eval_interval	10
+
+Times taken:
+0.00093   parameter input
+0.28574   data preparation
+645.97822   training
+0.00061   saving results
+646.26551   total

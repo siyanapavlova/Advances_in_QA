@@ -559,7 +559,7 @@ if __name__ == "__main__":
     timer("saving_model")
 
 
-    print("Evaluating...")
+    print("Evaluating...") #TODO make sure that this works (too many values to unpack?)
     precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw,
                                                              text_length=text_length,
                                                              try_gpu=True)
@@ -569,8 +569,8 @@ if __name__ == "__main__":
     print("F score:", f1)
     timer("evaluation")
 
-    if not os.path.exists(parent_dir + "/models/performance/"):
-        os.makedirs(parent_dir + "/models/performance/")
+    if not os.path.exists(parent_dir + "/models/outputs/"):
+        os.makedirs(parent_dir + "/models/outputs/")
 
     with open(parent_dir + predictions_rel_path, 'w', encoding='utf-8') as f:
         for i in range(len(ids)):
