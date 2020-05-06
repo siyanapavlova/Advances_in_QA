@@ -52,17 +52,17 @@ if __name__=="__main__":
     
     # TODO: edit the next lines to use the paths from config + whatever
     # is specified by the user (argparse)
-    if not os.path.exists(parent_dir + "/models/performance/"):
-        os.makedirs(parent_dir + "/models/performance/")
+    if not os.path.exists(parent_dir + "/models/visuals/"):
+        os.makedirs(parent_dir + "/models/visuals/")
     
-    with open(parent_dir + '/models/performance/outputs.txt', 'w', encoding='utf-8') as f:
+    with open(parent_dir + '/models/visuals/outputs.txt', 'w', encoding='utf-8') as f:
         for i in range(len(ids)):
             f.write(ids[i] + "\t" + \
                     ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
                     ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
     
-    with open(parent_dir + '/models/performance/results.txt', 'w', encoding='utf-8') as f:
-        f.write("Outputs in: " + parent_dir + '/models/performance/outputs.txt'+ \
+    with open(parent_dir + '/models/visuals/results.txt', 'w', encoding='utf-8') as f:
+        f.write("Outputs in: " + parent_dir + '/models/visuals/outputs.txt'+ \
                "\nPrecision: " + str(precision) + \
                "\nRecall: " + str(recall) + \
                "\nF score: " + str(f1))

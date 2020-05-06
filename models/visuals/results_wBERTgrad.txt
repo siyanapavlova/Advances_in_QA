@@ -1,0 +1,19 @@
+Outputs in:  /home/simon/Desktop/LCT_Saarbrücken/Courses/AQA/project_AQA/models/performance/outputs.txt
+Precision: 0.20032051282051283
+Recall:    1.0
+F score:   0.33377837116154874
+Hyper parameters:
+dataset size: 1250
+test split:   0.2
+shuffle seed: 42
+text length:  250
+epochs:       1
+batch size:   4
+
+Times taken:
+4.30346   data_input
+15.9635   data_splitting
+808.68094   training
+6.4256   saving_model
+248.05266   evaluation
+1083.42784   total

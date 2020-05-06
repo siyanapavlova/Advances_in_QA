@@ -1,0 +1,21 @@
+Configuration in: config/PS_small_lr.cfg
+dataset_size	1250
+test_split	0.2
+shuffle_seed	42
+text_length	250
+epochs	1
+batch_size	4
+learning_rate	1e-05
+data_abs_path	/local/simonp/data/hotpot_train_v1.1.json
+model_abs_dir	/local/simonp/AQA/data_in_QA/models/
+losses_rel_path	../data_in_QA/models/performance/PS_checkup_wBERTgrad.txt
+predictions_rel_path	../data_in_QA/models/performance/outputs.txt
+performance_rel_path	../data_in_QA/models/performance/results_PS_checkup_wBERTgrad.txt
+
+Times taken:
+0.00167   parameter input
+5.65124   data loading
+19.37374   data preparation
+604.51921   training
+0.3675   saving results
+629.91339   total

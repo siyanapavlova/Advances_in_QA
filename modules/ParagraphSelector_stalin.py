@@ -499,8 +499,8 @@ if __name__ == "__main__":
     print("F score:", f1)
     timer("evaluation")
 
-    if not os.path.exists(parent_dir + "/models/performance/"):
-        os.makedirs(parent_dir + "/models/performance/")
+    if not os.path.exists(parent_dir + "/models/visuals/"):
+        os.makedirs(parent_dir + "/models/visuals/")
 
     with open(parent_dir + predictions_rel_path, 'w', encoding='utf-8') as f:
         for i in range(len(ids)):
