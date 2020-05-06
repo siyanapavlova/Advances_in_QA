@@ -92,6 +92,11 @@ Note that there is no control of whether all parameters that are required for th
 ### Files and Directories
 
 - `modules/` — the main modules of the architecture
+    - `ParagraphSelector.py` - implements the Paragraph Selector from the paper (section 3.1)
+    - `EntityGraph.py`- implements the Graph Constructor from the paper (section 3.2) and build the binary matrix used in section 3.4
+    - `Encoder.py` - implements the Encoder from the paper (section 3.3)
+    - `FusionBlock.py` - implements the Fusion Block from the paper (section 3.4)
+    - `Predictor.py` - implements the LSTM Prediction Layer from the paper (section 3.5)
 - `config/` — configuration files; input to ConfigReader objects
 - `models/` — results on performance tests of (ParagraphSelector, DFGN) models
 - `playground/` — code snippets and little scripts; unimportant for running code

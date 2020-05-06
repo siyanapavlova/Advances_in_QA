@@ -1,0 +1,9 @@
+# External packages required for to run this project
+# Install using pip:
+# pip install -r requirements.txt
+
+tqdm
+flair
+pycorenlp
+transformers
+sklearn
