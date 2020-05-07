@@ -390,6 +390,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
             if answer.endswith(token):
                 end_labels[i]=1
 
+
     # get supporting facts (paragraphs)
     # spans shape: {paragraph_ID:(abs_start,abs_end)}
     # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
@@ -410,6 +411,8 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     for i, para in enumerate(graph.context):
         if para[0] in raw_point[1]: # para title in supporting facts
             # make tokens within the span of the paragraph ones
+            #TODO 2020-05-07: change this so that only the supporting fact's sentence gets a 1 (and the rest of the paragraph stays 0)
+            # other parts: implement periodic evaluation during training; test dfgn; start big training
             sup_labels[ spans[i][0] : spans[i][1]+1 ] = 1
 
     return (sup_labels, start_labels, end_labels, type_labels) # M, M, M, 1
@@ -451,14 +454,14 @@ class BiDAFNet(torch.nn.Module):
     and slightly adapted.
     """
 
-    def __init__(self, hidden_size=768, output_size=300):
+    def __init__(self, hidden_size=768, output_size=300, dropout=0.0):
         super(BiDAFNet, self).__init__()
 
-        self.att_weight_c = Linear(hidden_size, 1)
-        self.att_weight_q = Linear(hidden_size, 1)
-        self.att_weight_cq = Linear(hidden_size, 1)
+        self.att_weight_c = Linear(hidden_size, 1, dropout=dropout)
+        self.att_weight_q = Linear(hidden_size, 1, dropout=dropout)
+        self.att_weight_cq = Linear(hidden_size, 1, dropout=dropout)
 
-        self.reduction_layer = Linear(hidden_size * 4, output_size)
+        self.reduction_layer = Linear(hidden_size * 4, output_size, dropout=dropout)
 
     def forward(self, emb1, emb2, batch_processing=False):
         """

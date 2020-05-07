@@ -15,19 +15,18 @@ from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predic
 import utils
 
 
-#TODO config input, blablabla
-
 
 class DFGN(torch.nn.Module):
     #TODO implement a save() method?
     #TODO implement loading of a previously trained DFGN model
     #TODO implement a predict() method for testing
-    def __init__(self, text_length, emb_size):
+    def __init__(self, text_length, emb_size,
+                 fb_dropout=0.5, predictor_dropout=0.3):
         #TODO docstring
         super(DFGN, self).__init__()
         self.encoder = Encoder.Encoder(text_length=text_length)
-        self.fusionblock = FusionBlock.FusionBlock(emb_size) #TODO sort out init
-        self.predictor = Predictor.Predictor(text_length, emb_size) #TODO sort out init
+        self.fusionblock = FusionBlock.FusionBlock(emb_size, dropout=fb_dropout) #TODO sort out init
+        self.predictor = Predictor.Predictor(text_length, emb_size, dropout=predictor_dropout) #TODO sort out init
 
     def forward(self, query_ids, context_ids, graph, fb_passes):
         """
@@ -57,8 +56,8 @@ def train(net, train_data, dev_data, model_save_path,
           ner_with_gpu=False, try_training_on_gpu=True,
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
-          epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None,
-          timed=False):
+          epochs=3, batch_size=1, learning_rate=1e-4,
+          eval_interval=None, timed=False):
     #TODO docstring
     """
 
@@ -299,7 +298,9 @@ if __name__ == '__main__':
     # ========== DFGN START
 
     dfgn = DFGN(text_length=cfg("text_length"),
-                emb_size=cfg("emb_size")) #TODO make sure this works; maybe include parameters from the config?
+                emb_size=cfg("emb_size"),
+                fb_dropout=cfg("fb_dropout"),
+                predictor_dropout=cfg("predictor_dropout")) #TODO make sure this works; maybe include parameters from the config?
 
     #TODO extract the loading of the NER tagger to somewhere outside training/batches
     losses, times = train(dfgn,

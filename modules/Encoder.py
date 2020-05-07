@@ -28,7 +28,7 @@ class Encoder(torch.nn.Module):
     """
 
     def __init__(self, text_length=512, pad_token_id=0, tokenizer=None,
-                 hidden_size=768, output_size=300, encoder_model=None):
+                 hidden_size=768, output_size=300, dropout=0.0, encoder_model=None):
         """
         Instantiate a Bert tokenizer and a BiDAF net which contains the BERT encoder.
         Sizes of input and output (768,300) are not implemented to be changeable.
@@ -46,7 +46,9 @@ class Encoder(torch.nn.Module):
         self.encoder_model = BertModel.from_pretrained('bert-base-uncased',
                          output_hidden_states=True, # TODO leave out output_attentions? (This implies some other changes!)
                          output_attentions=True) if not encoder_model else encoder_model
-        self.bidaf = BiDAFNet(hidden_size=hidden_size, output_size=output_size)
+        self.bidaf = BiDAFNet(hidden_size=hidden_size,
+                              output_size=output_size,
+                              dropout=dropout)
 
     def forward(self, q_token_ids, c_token_ids, batch=1):
         """

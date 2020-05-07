@@ -4,7 +4,7 @@ This is supposed to implement section 3.5 of the paper
 
 import torch
 import torch.nn as nn
-from utils import BiDAFNet
+from utils import Linear
 
 from utils import make_labeled_data_for_predictor
 
@@ -12,7 +12,7 @@ from utils import make_labeled_data_for_predictor
 class Predictor(nn.Module):
     #TODO docstring
 
-    def __init__(self, context_length, embedding_size):
+    def __init__(self, context_length, embedding_size, dropout=0.0):
         """
         TODO: update docstring
 
@@ -26,8 +26,8 @@ class Predictor(nn.Module):
         # We think we don't need BiDAF here because the context was
         # already updated by the query (this is what FusionBlock was about)
         # self.bidaf = BiDAFNet() # hidden_size=768, output_size=300
-
-        """
+        #CLEANUP around here
+        """ 
         QUESTIONNNNNSSSSS:
         
         1. Where does 2*d_2 come from (authors' code, line 365, 368, etc.)
@@ -51,10 +51,10 @@ class Predictor(nn.Module):
         self.f2 = nn.LSTM(3*d2, d2)
         self.f3 = nn.LSTM(3*d2, d2)
         # output dimension 2 because predicting the <in> class and the <out> class
-        self.linear_sup = nn.Linear(d2, 2) # this is not in the original paper(s)
-        self.linear_start = nn.Linear(d2, 2)
-        self.linear_end = nn.Linear(d2, 2)
-        self.linear_type = nn.Linear(M*d2, 3) # 3 because we have 3 types - yes, no, and span
+        self.linear_sup = Linear(d2, 2, dropout=dropout) # this is not in the original paper(s)
+        self.linear_start = Linear(d2, 2, dropout=dropout)
+        self.linear_end = Linear(d2, 2, dropout=dropout)
+        self.linear_type = Linear(M*d2, 3, dropout=dropout) # 3 because we have 3 types - yes, no, and span
 
 
     def forward(self, context_emb):

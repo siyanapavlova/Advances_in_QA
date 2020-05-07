@@ -17,7 +17,7 @@ class FusionBlock(nn.Module):
 	class defined in utils), and puts them together in its forward function.
 	"""
 
-	def __init__(self, emb_size):
+	def __init__(self, emb_size, dropout=0.0):
 		"""
 		Initialization function for the FusionBlock class
 		#TODO update docstring
@@ -29,12 +29,12 @@ class FusionBlock(nn.Module):
 
 		self.d2 = emb_size
 		self.droot = sqrt(self.d2) 						  # for formula 2
-		self.V = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 2
-		self.U = nn.Parameter(torch.Tensor(self.d2, 2*self.d2)) # for formula 5
-		self.b = nn.Parameter(torch.Tensor(self.d2, 1))    # for formula 5
-		self.W = nn.Parameter(torch.Tensor(2*self.d2, 1))  # for formula 6
+		self.V = nn.Parameter(torch.Tensor(self.d2, 2 * self.d2))  # for formula 2
+		self.U = nn.Parameter(torch.Tensor(self.d2, 2 * self.d2))  # for formula 5
+		self.b = nn.Parameter(torch.Tensor(self.d2, 1))  # for formula 5
+		self.W = nn.Parameter(torch.Tensor(2 * self.d2, 1))  # for formula 6
 
-		self.bidaf = BiDAFNet(hidden_size=300)
+		self.bidaf = BiDAFNet(hidden_size=300, dropout=dropout)
 
 		self.g2d_layer = nn.LSTM(2*self.d2, self.d2)
 
