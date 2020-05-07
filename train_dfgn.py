@@ -54,7 +54,7 @@ class DFGN(torch.nn.Module):
 
 def train(net, train_data, dev_data, model_save_path,
           ps_path, ps_threshold=0.1,
-          tagger_device='cpu', try_training_on_gpu=True,
+          ner_with_gpu=False, try_training_on_gpu=True,
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None,
@@ -80,6 +80,7 @@ def train(net, train_data, dev_data, model_save_path,
     para_selector = ParagraphSelector.ParagraphSelector(ps_path)
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') #TODO initialize this once only (= extract it to the main method)
 
+    tagger_device = 'gpu' if ner_with_gpu else 'cpu'
     flair.device = torch.device(tagger_device)
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
@@ -307,7 +308,7 @@ if __name__ == '__main__':
                           model_filepath, # where the dfgn model will be saved
                           ps_path=cfg("ps_model_abs_path"),
                           ps_threshold=cfg("ps_threshold"),
-                          tagger_device=cfg("tagger_device"),
+                          ner_with_gpu=cfg("use_gpu_for_ner"),
                           try_training_on_gpu=cfg("try_training_on_gpu"),
                           fb_passes=cfg("fb_passes"),
                           coefs=(cfg("lambda_s"), cfg("lambda_t")),
