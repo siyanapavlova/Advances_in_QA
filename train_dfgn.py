@@ -153,7 +153,7 @@ def train(net, train_data, dev_data, model_save_path,
             #TODO change utils.make_labeled_data_for_predictor() to process batches of data
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
-            sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
+            sup_labels, start_labels, end_labels, type_labels, _, _ = list(zip(*labels))
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
@@ -190,7 +190,7 @@ def train(net, train_data, dev_data, model_save_path,
             #c += 1 #TODO include this part
             ## Evaluate on validation set after some iterations
             #if c % batched_interval == 0:
-            #    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data)
+            #    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data) #TODO sort out what parameters to give
 
             #   if accuracy > best_acc:
             #        print(
@@ -210,6 +210,121 @@ def train(net, train_data, dev_data, model_save_path,
 
     return (losses, timer) if timed else losses
 
+def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=fb_passes):
+    """
+
+    :param net:
+    :param query:
+    :param context:
+    :param graph:
+    :param tokenizer:
+    :param sentence_lengths:
+    :param fb_passes:
+    :return:
+    """
+
+    # (M,2), (M,2), (M,2), (3) #TODO 08.05.2020 argmax of a 2D thing - what does that even mean... fix this
+    o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
+
+    # =========== GET ANSWERS
+    answer_start = o_start.argmax() #TODO take argmax of column 1, but make sure that the scores across a column are comparable
+    answer_end = o_end.argmax()
+    answer_type = o_type.argmax()
+    if answer_type == 0:
+        answer = "yes"
+    elif answer_type == 1:
+        answer = "no"
+    elif answer_type == 2 and answer_end >= answer_start:
+        answer = tokenizer.decode(graph.tokens[answer_start: answer_end + 1])
+    else:
+        answer = "noanswer"
+
+    # =========== GET SUPPORTING FACTS
+    pos = 0
+    sup_fact_pairs = []
+    for para, s_lens in zip(context, sentence_lengths):
+        for j, s_len in enumerate(s_lens):
+            score = round(sum(o_sup[pos: pos + s_len]) / s_len)  # take avg of token-wise scores and round to 0 or 1
+            if score == 1:
+                sup_fact_pairs.append([para[0], j])
+            pos += s_len
+
+    return answer, sup_fact_pairs
+
+
+def evaluate(net, dev_data, para_selector,
+             ner_tagger, model_save_path,
+             tokenizer, device, fb_passes = 1,
+             ps_threshold = 0.1,
+             text_length = 250):
+    # ps_path,
+    # ner_with_gpu = False, try_training_on_gpu = True,
+    # eval_interval = None, timed = False
+    """
+
+    :param net:
+    :param dev_data:
+    :return:
+    """
+
+    queries = [point[2] for point in dev_data]
+
+    # make a list[ list[str, list[str]] ] for each point in the batch
+    contexts = [para_selector.make_context(point,
+                                           threshold=ps_threshold,
+                                           context_length=text_length)
+                for point in dev_data]
+
+    graphs = [EntityGraph.EntityGraph(c,
+                                      context_length=text_length,
+                                      tagger=ner_tagger)
+              for c in contexts]
+
+    # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
+    useless_datapoint_inds = [i for i, g in enumerate(graphs) if not g.graph]
+    queries = [q for i, q in enumerate(queries) if i not in useless_datapoint_inds]
+    contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
+    graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
+
+    # turn the texts into tensors in order to put them on the GPU
+    qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)]  # list[ (list[int], list[int]) ]
+    q_ids, c_ids = list(zip(*qc_ids))  # tuple(list[int]), tuple(list[int])
+    q_ids_list = [torch.tensor(q) for q in q_ids]  # list[Tensor]
+    c_ids_list = [torch.tensor(c) for c in c_ids]  # list[Tensor]
+
+    """ MAKE TRAINING LABELS """
+    # this is a list of 4-tuples: (support, start, end, type)
+    # replace the paragraphs in raw_point with their shortened versions (obtained from PS)
+    for (i, p), c in zip(enumerate(dev_data), contexts):
+        dev_data[i][3] = c
+    labels = [utils.make_labeled_data_for_predictor(g, p, tokenizer) for g, p in zip(graphs, dev_data)]
+    # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
+    sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths = list(zip(*labels))
+
+    q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
+    c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
+    for graph in graphs: graph.M = graph.M.to(device)
+    sup_labels = [t.to(device) if t is not None else None for t in
+                  sup_labels]  # TODO change this once it's done in the utils function
+    start_labels = [t.to(device) if t is not None else None for t in start_labels]
+    end_labels = [t.to(device) if t is not None else None for t in end_labels]
+    type_labels = [t.to(device) if t is not None else None for t in type_labels]
+    sup_labels_by_sentence = [t.to(device) if t is not None else None for t in sup_labels_by_sentence]
+
+    """ FORWARD PASSES """
+    # As 'graph' is not a tensor, normal batch processing isn't possible
+    answers = {} # {question_id: str} (either "yes", "no" or a string containing the answer)
+    sp = {} # {question_id: list[list[paragraph_title, sent_num]]}
+
+    sups, starts, ends, types = [], [], [], []
+    for i, (query, context, graph) in enumerate(zip(q_ids_list, c_ids_list, graphs)):
+        answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=fb_passes)
+
+        answers[dev_data[i][0]] = answer
+        sp[dev_data[i][0]] = sup_fact_pairs
+
+
+    """ EVALUATION """
 
 
 

@@ -33,9 +33,11 @@ raw_point = ("123456",
               "Mary"
              )
 
-sup_labels, start_labels, end_labels, type_labels = make_labeled_data_for_predictor(graph, raw_point, tokenizer)
+sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths = make_labeled_data_for_predictor(graph, raw_point, tokenizer)
 
 print(f"sup_labels: {sup_labels}")
 print(f"start_labels: {start_labels}")
 print(f"end_labels: {end_labels}")
 print(f"type_labels: {type_labels}")
+print(f"sup_labels_by_sentences: {sup_labels_by_sentence}")
+print(f"sentence_lengths: {sentence_lengths}")
