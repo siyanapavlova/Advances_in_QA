@@ -14,7 +14,7 @@ import flair # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 import utils
 
-
+#TODO 2020-05-07: implement periodic evaluation during training; test dfgn; start big training
 
 class DFGN(torch.nn.Module):
     #TODO implement a save() method?

@@ -322,26 +322,32 @@ class HotPotDataHandler():
         as a list of tuples (question_id, supporting_facts, query, paragraphs, answer).
         Shapes of the tuples' elements:
         - question_id: str
-        - supporting_facts: list[str]
+        - supporting_facts: set[str]
         - query: str
         - paragraphs: 10-element list[str, list[str]]
             - first element: paragraph title
             - second element: list of the paragraph's sentences
         - answer: str
+        - supp_facts_detailed: dict{str: [int]}
 
         :return: list(tuple( str, list[str], str, list[str,list[str]], str ))
         """
         result = []
         for point in self.data:
-            supp_facts = set([fact[0] for fact in point["supporting_facts"]])
+            # supp_facts = set([fact[0] for fact in point["supporting_facts"]])
+
+            supp_facts_detailed = {}
+            for fact in point["supporting_facts"]:
+                if supp_facts_detailed.get(fact[0]):
+                    supp_facts_detailed[fact[0]].append(fact[1])
+                else:
+                    supp_facts_detailed[fact[0]] = [fact[1]]
             result.append(tuple((point["_id"],
-                                 supp_facts,
+                                 supp_facts_detailed, # we used to use supp_facts here
                                  point["question"],
                                  point["context"],
                                  point["answer"])))
         return result
-
-
 
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
@@ -390,34 +396,22 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
             if answer.endswith(token):
                 end_labels[i]=1
 
-
     # get supporting facts (paragraphs)
-    # spans shape: {paragraph_ID:(abs_start,abs_end)}
-    # (these are including indices, i.e. (0, 25) means the first 26 tokens are in the paragraph)
-    spans = {} # dict[int:(int,int)]
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
-    string_paragraphs = ["".join(p) for p in list_context] # make context into a list of strings (one string per paragraph)
-    # use an extra tokenizer again in order to have the context's tokens grouped into paragraphs
-    tokenized_paragraphs = [tokenizer.tokenize(p) for p in string_paragraphs] # list[list[str]], other than graph.tokens, which is list[str]
+    # use an extra tokenizer again in order to have the correct number of tokens in order to determine position later
+    tokenized_sentences = [[tokenizer.tokenize(s) for s in p] for p in list_context] # list[list[list[str]]]
 
-    # find the spans of supporting facts
-    curr_start = 0
-    for p_num, p_tokens in enumerate(tokenized_paragraphs):
-        curr_end = curr_start+len(p_tokens)
-        spans[p_num] = (curr_start, curr_end) # save paragraph span
-        curr_start = curr_end + 1 # move to next paragraph
-
-    # translate the spans into the label tensor
+    position = 0
     for i, para in enumerate(graph.context):
-        if para[0] in raw_point[1]: # para title in supporting facts
-            # make tokens within the span of the paragraph ones
-            #TODO 2020-05-07: change this so that only the supporting fact's sentence gets a 1 (and the rest of the paragraph stays 0)
-            # other parts: implement periodic evaluation during training; test dfgn; start big training
-            sup_labels[ spans[i][0] : spans[i][1]+1 ] = 1
+        if raw_point[1].get(para[0]): # para title in supporting facts
+            for j, sent in enumerate(tokenized_sentences[i]):
+                if j - 1 in raw_point[1][para[0]]: # the 0th sentence is the paragraph title, j - 1 accounts for that
+                    sup_labels[ position : position + len(sent) ] = 1 # fill with 1's from position to position + len(sent)
+                position += len(sent) # update position
+        else: # if the paragraph does not have any supporting facts, update our position with the total paragraph length
+            position += sum([len(sent) for sent in tokenized_sentences[i]])
 
     return (sup_labels, start_labels, end_labels, type_labels) # M, M, M, 1
-
-
 
 
 class Linear(nn.Module):
