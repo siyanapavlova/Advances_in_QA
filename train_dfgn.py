@@ -147,6 +147,9 @@ def train(net, train_data, dev_data, model_save_path,
 
             """ MAKE TRAINING LABELS """
             # this is a list of 4-tuples: (support, start, end, type)
+            # replace the paragraphs in raw_point with their shortened versions (obtained from PS)
+            for (i, p), c in zip(enumerate(batch), contexts):
+                batch[i][3] = c
             #TODO change utils.make_labeled_data_for_predictor() to process batches of data
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
