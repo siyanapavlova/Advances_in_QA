@@ -424,6 +424,25 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
 
     return (sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths) # M, M, M, 1
 
+def make_eval_data(raw_points):
+    """
+    TODO: docstring
+    :param raw_points:
+    :return:
+    """
+
+    eval_data = {"answer": {},
+                 "sp": {}}
+    for point in raw_points:
+        eval_data["answer"][point[0]] = point[4] # map question IDs to answers
+        # map question IDs to supporting facts
+        eval_data["sp"][point[0]] = []
+        for para_title, sentences in point[1].items():
+            for sent_idx in sentences:
+                eval_data["sp"][point[0]].append([para_title, sent_idx])
+
+    return eval_data
+
 
 class Linear(nn.Module):
     '''
