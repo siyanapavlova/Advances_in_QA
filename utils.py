@@ -437,9 +437,14 @@ def make_eval_data(raw_points):
         eval_data["answer"][point[0]] = point[4] # map question IDs to answers
         # map question IDs to supporting facts
         eval_data["sp"][point[0]] = []
-        for para_title, sentences in point[1].items(): # point[1] is {str:list[int]}
-            for sent_idx in sentences:
-                eval_data["sp"][point[0]].append([para_title, sent_idx])
+
+        for para in point[3]: # point
+            # if the paragraph has supporting facts;
+            if point[1].get(para[0]): # point[1] is {str:list[int]}; para[0] is the paragraph title
+                for sent_idx in point[1][para[0]]: # for each sentence that's a supporting fact
+                    # if the sentence with index sent_idx is in the paragraph (has not been cropped out by PS)
+                    if sent_idx < len(para[1]): # para[1] is a list of sentences in the paragraph
+                        eval_data["sp"][point[0]].append([para[0], sent_idx])
 
     return eval_data
 
