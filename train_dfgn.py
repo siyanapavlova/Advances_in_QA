@@ -321,7 +321,7 @@ def evaluate(net, dev_data, para_selector,
     except FileNotFoundError: # ... If not, make labeled data and write it to eval_data_filepath.
         for (i, p), c in zip(enumerate(dev_data), contexts):
             dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
-        utils.Siyanas_new_utils_function(dev_data, eval_data_filepath) # TODO insert here!
+        dev_data = utils.make_eval_data(dev_data)
 
 
 
