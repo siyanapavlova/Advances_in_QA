@@ -50,10 +50,10 @@ class Predictor(nn.Module):
         self.f1 = nn.LSTM(2*d2, d2)
         self.f2 = nn.LSTM(3*d2, d2)
         self.f3 = nn.LSTM(3*d2, d2)
-        # output dimension 2 because predicting the <in> class and the <out> class
-        self.linear_sup = Linear(d2, 2, dropout=dropout) # this is not in the original paper(s)
-        self.linear_start = Linear(d2, 2, dropout=dropout)
-        self.linear_end = Linear(d2, 2, dropout=dropout)
+
+        self.linear_sup = Linear(d2, 1, dropout=dropout) # this is not in the original paper(s)
+        self.linear_start = Linear(d2, 1, dropout=dropout)
+        self.linear_end = Linear(d2, 1, dropout=dropout)
         self.linear_type = Linear(M*d2, 3, dropout=dropout) # 3 because we have 3 types - yes, no, and span
 
 
@@ -67,13 +67,13 @@ class Predictor(nn.Module):
         Ct = context_emb.unsqueeze(0) # (1, M, d2)
 
         o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
-        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 2)
+        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
-        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 2)
+        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 2)
+        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
         o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)

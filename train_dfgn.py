@@ -10,6 +10,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer
 
+import hotpot_evaluate_v1 as official_eval_script
 import flair # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 import utils
@@ -83,7 +84,8 @@ def train(net, train_data, dev_data, model_save_path,
     flair.device = torch.device(tagger_device)
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
-    criterion = torch.nn.CrossEntropyLoss()
+    bce_criterion = torch.nn.BCELoss() # for prediction of start, end, and sup_facts
+    criterion = torch.nn.CrossEntropyLoss() # for prediction of answer type
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
     losses = []
@@ -157,11 +159,19 @@ def train(net, train_data, dev_data, model_save_path,
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
-            for graph in graphs: graph.M = graph.M.to(device)
-            sup_labels = [t.to(device) if t is not None else None for t in sup_labels] #TODO change this once it's done in the utils function
-            start_labels = [t.to(device) if t is not None else None for t in start_labels]
-            end_labels = [t.to(device) if t is not None else None for t in end_labels]
-            type_labels = [t.to(device) if t is not None else None for t in type_labels]
+            for i, g in enumerate(graphs):
+                graphs[i].M = g.M.to(device) # work with enumerate to actualy mutate the graph objects
+
+            #sup_labels = [t.to(device) if t is not None else None for t in sup_labels] #TODO change this once it's done in the utils function
+            #start_labels = [t.to(device) if t is not None else None for t in start_labels]
+            #end_labels = [t.to(device) if t is not None else None for t in end_labels]
+            #type_labels = [t.to(device) if t is not None else None for t in type_labels] #CLEANUP?
+
+            sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
+            start_labels = torch.stack(start_labels).to(device)  # (batch, M)
+            end_labels = torch.stack(end_labels).to(device)      # (batch, M)
+            type_labels = torch.stack(type_labels).to(device)    # (batch)
+
 
             optimizer.zero_grad()
 
@@ -169,18 +179,23 @@ def train(net, train_data, dev_data, model_save_path,
             # As 'graph' is not a tensor, normal batch processing isn't possible
             sups, starts, ends, types = [], [], [], []
             for query, context, graph in zip(q_ids_list, c_ids_list, graphs):
-                # (M,2), (M,2), (M,2), (3)
+                # (M), (M), (M), (1, 3)
                 o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
                 sups.append(o_sup)
                 starts.append(o_start)
                 ends.append(o_end)
                 types.append(o_type)
 
+            sups =   torch.stack(sups)   # (batch, M)
+            starts = torch.stack(starts) # (batch, M)
+            ends =   torch.stack(ends)   # (batch, M)
+            types =  torch.stack(types)  # (batch, 1, 3)
+
             """ LOSSES & BACKPROP """
-            sup_loss = sum([criterion(p,l) for p,l in zip(sups, sup_labels)])
-            start_loss = sum([criterion(p,l) for p,l in zip(starts, start_labels)])
-            end_loss = sum([criterion(p,l) for p,l in zip(ends, end_labels)])
-            type_loss = sum([criterion(p,l) for p,l in zip(types, type_labels)])
+            sup_loss =   bce_criterion(sups, sup_labels)
+            start_loss = bce_criterion(starts, start_labels)
+            end_loss =   bce_criterion(ends, end_labels)
+            type_loss =      criterion(types, type_labels)
 
             loss = start_loss + end_loss + coefs[0]*sup_loss + coefs[1]*type_loss # formula 15
 
@@ -190,6 +205,7 @@ def train(net, train_data, dev_data, model_save_path,
             #c += 1 #TODO include this part
             ## Evaluate on validation set after some iterations
             #if c % batched_interval == 0:
+
             #    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data) #TODO sort out what parameters to give
 
             #   if accuracy > best_acc:
@@ -210,7 +226,7 @@ def train(net, train_data, dev_data, model_save_path,
 
     return (losses, timer) if timed else losses
 
-def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=fb_passes):
+def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1):
     """
 
     :param net:
@@ -223,11 +239,11 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=f
     :return:
     """
 
-    # (M,2), (M,2), (M,2), (3) #TODO 08.05.2020 argmax of a 2D thing - what does that even mean... fix this
+    # (M), (M), (M), (1,3)
     o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
 
     # =========== GET ANSWERS
-    answer_start = o_start.argmax() #TODO take argmax of column 1, but make sure that the scores across a column are comparable
+    answer_start = o_start.argmax() #TODO make sure that these tensors are all only containing one number!
     answer_end = o_end.argmax()
     answer_type = o_type.argmax()
     if answer_type == 0:
@@ -253,6 +269,7 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=f
 
 
 def evaluate(net, dev_data, para_selector,
+             eval_data_filepath, eval_preds_filepath, #TODO pass a filepath to avoid multiple gold-label-making?
              ner_tagger, model_save_path,
              tokenizer, device, fb_passes = 1,
              ps_threshold = 0.1,
@@ -267,6 +284,7 @@ def evaluate(net, dev_data, para_selector,
     :return:
     """
 
+    """ PREPADE DATA FOR PREDICTION """
     queries = [point[2] for point in dev_data]
 
     # make a list[ list[str, list[str]] ] for each point in the batch
@@ -289,42 +307,56 @@ def evaluate(net, dev_data, para_selector,
     # turn the texts into tensors in order to put them on the GPU
     qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)]  # list[ (list[int], list[int]) ]
     q_ids, c_ids = list(zip(*qc_ids))  # tuple(list[int]), tuple(list[int])
-    q_ids_list = [torch.tensor(q) for q in q_ids]  # list[Tensor]
-    c_ids_list = [torch.tensor(c) for c in c_ids]  # list[Tensor]
+    q_ids_list = [torch.tensor(q).to(device) for q in q_ids]  # list[Tensor]
+    c_ids_list = [torch.tensor(c).to(device) for c in c_ids]  # list[Tensor]
 
-    """ MAKE TRAINING LABELS """
-    # this is a list of 4-tuples: (support, start, end, type)
-    # replace the paragraphs in raw_point with their shortened versions (obtained from PS)
-    for (i, p), c in zip(enumerate(dev_data), contexts):
-        dev_data[i][3] = c
-    labels = [utils.make_labeled_data_for_predictor(g, p, tokenizer) for g, p in zip(graphs, dev_data)]
-    # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
-    sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths = list(zip(*labels))
+    for i,g in enumerate(graphs):
+        graphs[i].M = g.M.to(device)  # work with enumerate to actualy mutate the graph objects
 
-    q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
-    c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
-    for graph in graphs: graph.M = graph.M.to(device)
-    sup_labels = [t.to(device) if t is not None else None for t in
-                  sup_labels]  # TODO change this once it's done in the utils function
-    start_labels = [t.to(device) if t is not None else None for t in start_labels]
-    end_labels = [t.to(device) if t is not None else None for t in end_labels]
-    type_labels = [t.to(device) if t is not None else None for t in type_labels]
-    sup_labels_by_sentence = [t.to(device) if t is not None else None for t in sup_labels_by_sentence]
+
+    """ MAKE LABELS IF NECESSARY"""
+    try: # check whether eval_data_filepath exists ....
+        f = open(eval_data_filepath, "r")
+        f.close()
+    except FileNotFoundError: # ... If not, make labeled data and write it to eval_data_filepath.
+        for (i, p), c in zip(enumerate(dev_data), contexts):
+            dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
+        utils.Siyanas_new_utils_function(dev_data, eval_data_filepath) # TODO insert here!
+
+
+
+
+        labels = [utils.make_labeled_data_for_predictor(g, p, tokenizer) for g, p in zip(graphs, dev_data)] #CLEANUP?
+        sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths = list(zip(*labels)) #CLEANUP?
+
+        # sup_labels = [t.to(device) if t is not None else None for t in sup_labels]  # TODO change this once it's done in the utils function
+        # start_labels = [t.to(device) if t is not None else None for t in start_labels]
+        # end_labels = [t.to(device) if t is not None else None for t in end_labels]
+        # type_labels = [t.to(device) if t is not None else None for t in type_labels]
+        # sup_labels_by_sentence = [t.to(device) if t is not None else None for t in sup_labels_by_sentence] #CLEANUP?
+
+        # sup_labels = torch.stack(sup_labels).to(device)  # (batch, M)
+        # start_labels = torch.stack(start_labels).to(device)  # (batch, M)
+        # end_labels = torch.stack(end_labels).to(device)  # (batch, M)
+        # type_labels = torch.stack(type_labels).to(device)  # (batch)
+        # sup_labels_by_sentence = torch.stack(sup_labels_by_sentence).to(device) # shape: (batch, num_sentences) #CLEANUP?
+
 
     """ FORWARD PASSES """
-    # As 'graph' is not a tensor, normal batch processing isn't possible
     answers = {} # {question_id: str} (either "yes", "no" or a string containing the answer)
     sp = {} # {question_id: list[list[paragraph_title, sent_num]]}
 
-    sups, starts, ends, types = [], [], [], []
     for i, (query, context, graph) in enumerate(zip(q_ids_list, c_ids_list, graphs)):
         answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=fb_passes)
 
-        answers[dev_data[i][0]] = answer
-        sp[dev_data[i][0]] = sup_fact_pairs
+        answers[dev_data[i][0]] = answer  # {question_id: str}
+        sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
 
+    #TODO write answers and sp to a file: eval_preds_filepath
 
     """ EVALUATION """
+    metrics = official_eval_script.eval(eval_preds_filepath, eval_data_filepath)
+
 
 
 

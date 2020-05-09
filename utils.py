@@ -402,7 +402,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
     num_sentences = sum([len(p) for p in list_context]) # number of sentence, including headers
 
-    sup_labels_by_sentence = torch.zeros(num_sentences, dtype = torch.long)
+    sup_labels_by_sentence = torch.zeros(num_sentences, dtype = torch.long) #TODO needed? originally intended for custom evaluation (we probably use the official eval script)
 
     # use an extra tokenizer again in order to have the correct number of tokens in order to determine position later
     tokenized_sentences = [[tokenizer.tokenize(s) for s in p] for p in list_context] # list[list[list[str]]]
