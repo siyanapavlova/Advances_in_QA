@@ -6,6 +6,7 @@ This is supposed to do the whole job!
 import os, sys, argparse
 import pickle # mainly for training data
 import torch
+import json
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer
@@ -52,8 +53,9 @@ class DFGN(torch.nn.Module):
 
         return outputs
 
-def train(net, train_data, dev_data, model_save_path,
-          ps_path, ps_threshold=0.1,
+def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, model_save_path,
+          ps_path,
+          ps_threshold=0.1,
           ner_with_gpu=False, try_training_on_gpu=True,
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
@@ -103,15 +105,15 @@ def train(net, train_data, dev_data, model_save_path,
 
     print("Training...")
 
-    #c = 0  # counter over training examples #CLEANUP?
-    #best_acc = 0
-    #eval_interval = eval_interval if eval_interval else float('inf')
-    #batched_interval = round(eval_interval / batch_size)  # number of batches needed to reach eval_interval
+
+    best_score = 0
+    eval_interval = eval_interval if eval_interval else float('inf') # interval in batches
     a_model_was_saved_at_some_point = False
 
     for epoch in range(epochs):
         print('Epoch %d/%d' % (epoch + 1, epochs))
         lost_datapoints_log = []
+        batch_counter = 0
 
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
 
@@ -197,21 +199,33 @@ def train(net, train_data, dev_data, model_save_path,
             loss.backward(retain_graph=True)
             losses.append(loss.item()) # for logging purposes #TODO log all 4 individual losses separately?
 
-            #c += 1 #TODO include this part
-            ## Evaluate on validation set after some iterations
-            #if c % batched_interval == 0:
 
-            #    _, _, _, accuracy, _, _, _ = self.evaluate(dev_data) #TODO sort out what parameters to give
+            batch_counter += 1
+            # Evaluate on validation set after some iterations
+            if batch_counter % eval_interval == 0: #TODO change batched_interval to evaluate every n batches (instead of n data points)
 
-            #   if accuracy > best_acc:
-            #        print(
-            #            f"Better eval found with accuracy {round(accuracy, 3)} (+{round(accuracy - best_acc, 3)})")
-            #        best_acc = accuracy
-            #        torch.save(net, model_save_path)
-            #        a_model_was_saved_at_some_point = True
-            #    else:
-            #        print(f"No improvement yet...")
-            #    timer(f"training_evaluation_{c/batched_interval}")
+                # this calls the official evaluation script (altered to return metrics)
+                metrics = evaluate(net,  para_selector, dev_data, #TODO sort these parameters!!!!
+                                                      dev_data_filepath,
+                                                      dev_preds_filepath,
+                                                      ner_tagger,
+                                                      tokenizer,
+                                                      device,
+                                                      fb_passes = fb_passes,
+                                                      ps_threshold = ps_threshold,
+                                                      text_length = text_length)
+                score = metrics["joint_f1"]
+                if score > best_score:
+                    print(
+                        f"Better eval found with accuracy {round(score, 3)} (+{round(score - best_score, 3)})")
+                    best_score = score
+                    torch.save(net, model_save_path)
+                    a_model_was_saved_at_some_point = True
+                else:
+                    print(f"No improvement yet...")
+                timer(f"training_evaluation_{batch_counter/eval_interval}")
+
+
 
             optimizer.step()
         timer(f"training_epoch_{epoch}")
@@ -264,11 +278,9 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
 
 
 def evaluate(net, dev_data, para_selector,
-             eval_data_filepath, eval_preds_filepath, #TODO pass a filepath to avoid multiple gold-label-making?
-             ner_tagger, model_save_path,
-             tokenizer, device, fb_passes = 1,
-             ps_threshold = 0.1,
-             text_length = 250):
+             eval_data_filepath, eval_preds_filepath,
+             ner_tagger, tokenizer, device,
+             fb_passes = 1, ps_threshold = 0.1, text_length = 250):
     # ps_path,
     # ner_with_gpu = False, try_training_on_gpu = True,
     # eval_interval = None, timed = False
@@ -320,10 +332,11 @@ def evaluate(net, dev_data, para_selector,
         for (i, p), c in zip(enumerate(dev_data), contexts):
             dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
         dev_data = utils.make_eval_data(dev_data)
-        #TODO write dev_data to eval_data_filepath
 
+        with open(eval_data_filepath, 'w') as f:
+            json.dump(dev_data, f)
 
-
+        #TODO pass dev_data_filepath through the whole script
 
     """ FORWARD PASSES """
     answers = {} # {question_id: str} (either "yes", "no" or a string containing the answer)
@@ -335,10 +348,11 @@ def evaluate(net, dev_data, para_selector,
         answers[dev_data[i][0]] = answer  # {question_id: str}
         sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
 
-    #TODO write answers and sp to a file: eval_preds_filepath
+    with open(eval_data_filepath, 'w') as f:
+        json.dump( {"answer":answers, "sp":sp} , f)
 
     """ EVALUATION """
-    metrics = official_eval_script.eval(eval_preds_filepath, eval_data_filepath)
+    return official_eval_script.eval(eval_preds_filepath, eval_data_filepath) #TODO return aything else than the metrics?
 
 
 
@@ -365,6 +379,10 @@ if __name__ == '__main__':
     losses_abs_path = model_abs_path + "losses"
     traintime_abs_path = model_abs_path + "times"
 
+    eval_data_dump_dir = cfg("eval_data_dump_dir")
+    eval_data_dump_filepath =  eval_data_dump_dir + "gold"
+    eval_preds_dump_filepath = eval_data_dump_dir + "predictions"
+
     # check all relevant file paths and directories before starting training
     # make sure that the training data will be found
     for path in [cfg("data_abs_path"), cfg("dev_data_abs_path")]:
@@ -375,7 +393,7 @@ if __name__ == '__main__':
             print(e)
             sys.exit()
     # make sure that the output directories exist
-    for path in [model_abs_path]:
+    for path in [model_abs_path, eval_data_dump_dir, cfg("ps_model_abs_path")]:
         if not os.path.exists(path):
             print(f"newly creating {path}")
             os.makedirs(path)
@@ -439,6 +457,8 @@ if __name__ == '__main__':
     losses, times = train(dfgn,
                           train_data_raw, # in batches
                           dev_data_raw,
+                          eval_data_dump_filepath, # for dumping processed dev_data_raw
+                          eval_preds_dump_filepath, # for dumping predictions during evaluation
                           model_filepath, # where the dfgn model will be saved
                           ps_path=cfg("ps_model_abs_path"),
                           ps_threshold=cfg("ps_threshold"),
