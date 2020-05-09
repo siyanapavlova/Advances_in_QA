@@ -152,20 +152,15 @@ def train(net, train_data, dev_data, model_save_path,
             # replace the paragraphs in raw_point with their shortened versions (obtained from PS)
             for (i, p), c in zip(enumerate(batch), contexts):
                 batch[i][3] = c
-            #TODO change utils.make_labeled_data_for_predictor() to process batches of data
+            #TODO? change utils.make_labeled_data_for_predictor() to process batches of data
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
-            sup_labels, start_labels, end_labels, type_labels, _, _ = list(zip(*labels))
+            sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
             for i, g in enumerate(graphs):
                 graphs[i].M = g.M.to(device) # work with enumerate to actualy mutate the graph objects
-
-            #sup_labels = [t.to(device) if t is not None else None for t in sup_labels] #TODO change this once it's done in the utils function
-            #start_labels = [t.to(device) if t is not None else None for t in start_labels]
-            #end_labels = [t.to(device) if t is not None else None for t in end_labels]
-            #type_labels = [t.to(device) if t is not None else None for t in type_labels] #CLEANUP?
 
             sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
             start_labels = torch.stack(start_labels).to(device)  # (batch, M)
@@ -304,6 +299,9 @@ def evaluate(net, dev_data, para_selector,
     contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
     graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
 
+    # required for prediction in the right format
+    sentence_lengths = [utils.sentence_lengths(c, tokenizer) for c in contexts]
+
     # turn the texts into tensors in order to put them on the GPU
     qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)]  # list[ (list[int], list[int]) ]
     q_ids, c_ids = list(zip(*qc_ids))  # tuple(list[int]), tuple(list[int])
@@ -322,24 +320,9 @@ def evaluate(net, dev_data, para_selector,
         for (i, p), c in zip(enumerate(dev_data), contexts):
             dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
         dev_data = utils.make_eval_data(dev_data)
+        #TODO write dev_data to eval_data_filepath
 
 
-
-
-        labels = [utils.make_labeled_data_for_predictor(g, p, tokenizer) for g, p in zip(graphs, dev_data)] #CLEANUP?
-        sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths = list(zip(*labels)) #CLEANUP?
-
-        # sup_labels = [t.to(device) if t is not None else None for t in sup_labels]  # TODO change this once it's done in the utils function
-        # start_labels = [t.to(device) if t is not None else None for t in start_labels]
-        # end_labels = [t.to(device) if t is not None else None for t in end_labels]
-        # type_labels = [t.to(device) if t is not None else None for t in type_labels]
-        # sup_labels_by_sentence = [t.to(device) if t is not None else None for t in sup_labels_by_sentence] #CLEANUP?
-
-        # sup_labels = torch.stack(sup_labels).to(device)  # (batch, M)
-        # start_labels = torch.stack(start_labels).to(device)  # (batch, M)
-        # end_labels = torch.stack(end_labels).to(device)  # (batch, M)
-        # type_labels = torch.stack(type_labels).to(device)  # (batch)
-        # sup_labels_by_sentence = torch.stack(sup_labels_by_sentence).to(device) # shape: (batch, num_sentences) #CLEANUP?
 
 
     """ FORWARD PASSES """

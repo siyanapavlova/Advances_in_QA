@@ -402,11 +402,8 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
     num_sentences = sum([len(p) for p in list_context]) # number of sentence, including headers
 
-    sup_labels_by_sentence = torch.zeros(num_sentences, dtype = torch.long) #TODO needed? originally intended for custom evaluation (we probably use the official eval script)
-
     # use an extra tokenizer again in order to have the correct number of tokens in order to determine position later
     tokenized_sentences = [[tokenizer.tokenize(s) for s in p] for p in list_context] # list[list[list[str]]]
-    sentence_lengths = [[len(s) for s in p] for p in tokenized_sentences] # list[list[int]]
 
     position = 0
     sent_position = 0
@@ -415,14 +412,25 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
             for j, sent in enumerate(tokenized_sentences[i]):
                 if j - 1 in raw_point[1][para[0]]: # the 0th sentence is the paragraph title, j - 1 accounts for that
                     sup_labels[ position : position + len(sent) ] = 1 # fill with 1's from position to position + len(sent)
-                    sup_labels_by_sentence[sent_position] = 1
                 position += len(sent) # update position
                 sent_position += 1
         else: # if the paragraph does not have any supporting facts, update our position with the total paragraph length
             position += sum([len(sent) for sent in tokenized_sentences[i]])
             sent_position += len(tokenized_sentences[i])
 
-    return (sup_labels, start_labels, end_labels, type_labels, sup_labels_by_sentence, sentence_lengths) # M, M, M, 1
+    return sup_labels, start_labels, end_labels, type_labels # M, M, M, 1
+
+def sentence_lengths(context, tokenizer):
+    """
+    TODO docstring
+    :param context: a context as provided by EntityGraph, for example
+    :param tokenizer: usually a BERT Tokenizer
+    :return: list[list[int]] -- number of tokens per sentence, per paragraph
+    """
+    list_context = [[p[0] + " "] + p[1] for p in context]  # squeeze header into the paragraph
+    tokenized_sentences = [[tokenizer.tokenize(s) for s in p] for p in list_context]  # list[list[list[str]]]
+    sentence_lengths = [[len(s) for s in p] for p in tokenized_sentences]  # list[list[int]]
+    return sentence_lengths
 
 def make_eval_data(raw_points):
     """
