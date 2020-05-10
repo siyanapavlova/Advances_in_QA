@@ -18,10 +18,8 @@ import utils
 
 #TODO 2020-05-07: implement periodic evaluation during training; test dfgn; start big training
 
-class DFGN(torch.nn.Module):
-    #TODO implement a save() method?
-    #TODO implement loading of a previously trained DFGN model
-    #TODO implement a predict() method for testing
+class DFGN(torch.nn.Module): # TODO extract this to a separate module
+    #TODO implement loading of a previously trained DFGN model (for final evaluation!)
     def __init__(self, text_length, emb_size,
                  fb_dropout=0.5, predictor_dropout=0.3):
         #TODO docstring
@@ -29,6 +27,10 @@ class DFGN(torch.nn.Module):
         self.encoder = Encoder.Encoder(text_length=text_length)
         self.fusionblock = FusionBlock.FusionBlock(emb_size, dropout=fb_dropout) #TODO sort out init
         self.predictor = Predictor.Predictor(text_length, emb_size, dropout=predictor_dropout) #TODO sort out init
+
+    def from_file(self, filepath):
+        #TODO load all 3 parts individually and then make a DFGN object? Or des save()/load() handle this well already?
+        pass
 
     def forward(self, query_ids, context_ids, graph, fb_passes):
         """
@@ -54,7 +56,7 @@ class DFGN(torch.nn.Module):
         return outputs
 
 def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, model_save_path,
-          ps_path,
+          ps_path, #TODO sort these nicely
           ps_threshold=0.1,
           ner_with_gpu=False, try_training_on_gpu=True,
           text_length=250,
@@ -75,12 +77,12 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     :param batch_size:
     :param learning_rate:
     :param eval_interval:
-    :return:
+    :return: list[(real_batch_size, overall_loss, sup_loss, start_loss, end_loss, type_loss)], list[dict{metrics}], Timer
     """
     timer = utils.Timer()
 
     para_selector = ParagraphSelector.ParagraphSelector(ps_path)
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') #TODO initialize this once only (= extract it to the main method)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     tagger_device = 'gpu' if ner_with_gpu else 'cpu'
     flair.device = torch.device(tagger_device)
@@ -91,6 +93,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
     losses = []
+    real_batch_sizes = []  # some data points are not usable; this logs the real sizes
+    dev_scores = []
 
     # Set the network into train mode
     net.train()
@@ -111,8 +115,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     a_model_was_saved_at_some_point = False
 
     for epoch in range(epochs):
+        # TODO take recurrent times for forward, evaluation saving etc.
         print('Epoch %d/%d' % (epoch + 1, epochs))
-        lost_datapoints_log = []
         batch_counter = 0
 
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
@@ -136,8 +140,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             queries = [q for i,q in enumerate(queries) if i not in useless_datapoint_inds]
             contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
             graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
-            lost_datapoints_log.append(len(useless_datapoint_inds)) #TODO track the batch sizes!
-            print(f"number of useless datapoints in this batch: {len(useless_datapoint_inds)}/{batch_size}") #CLEANUP
+            real_batch_sizes.append(batch_size - len(useless_datapoint_inds)) #TODO track the batch sizes!
 
             # if our batch is completely useless, just continue with the next batch. :(
             if len(useless_datapoint_inds) == batch_size:
@@ -150,19 +153,19 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             c_ids_list = [torch.tensor(c) for c in c_ids] # list[Tensor]
 
             """ MAKE TRAINING LABELS """
-            # this is a list of 4-tuples: (support, start, end, type)
             # replace the paragraphs in raw_point with their shortened versions (obtained from PS)
             for (i, p), c in zip(enumerate(batch), contexts):
                 batch[i][3] = c
-            #TODO? change utils.make_labeled_data_for_predictor() to process batches of data
-            labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)]
+
+            # TODO? change utils.make_labeled_data_for_predictor() to process batches of data?
+            labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)] # list[(support, start, end, type)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
             for i, g in enumerate(graphs):
-                graphs[i].M = g.M.to(device) # work with enumerate to actualy mutate the graph objects
+                graphs[i].M = g.M.to(device) # work with enumerate to actually mutate the graph objects
 
             sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
             start_labels = torch.stack(start_labels).to(device)  # (batch, M)
@@ -170,14 +173,14 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             type_labels = torch.stack(type_labels).to(device)    # (batch)
 
 
+            """ FORWARD PASSES """
             optimizer.zero_grad()
 
-            """ FORWARD PASSES """
-            # As 'graph' is not a tensor, normal batch processing isn't possible
+
             sups, starts, ends, types = [], [], [], []
-            for query, context, graph in zip(q_ids_list, c_ids_list, graphs):
-                # (M), (M), (M), (1, 3)
-                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
+            for query, context, graph in zip(q_ids_list, c_ids_list, graphs): # 'graph' is not a tensor -> for-loop instead of batch processing
+
+                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes) # (M), (M), (M), (1, 3)
                 sups.append(o_sup)
                 starts.append(o_start)
                 ends.append(o_end)
@@ -189,16 +192,20 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             types =  torch.stack(types)  # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
-            sup_loss =   bce_criterion(sups, sup_labels)
+            sup_loss =   bce_criterion(sups,   sup_labels)
             start_loss = bce_criterion(starts, start_labels)
-            end_loss =   bce_criterion(ends, end_labels)
-            type_loss =      criterion(types, type_labels)
+            end_loss =   bce_criterion(ends,   end_labels)
+            type_loss =      criterion(types,  type_labels)
 
+            # This doesn't have the weak supervision BFS mask stuff from section 3.5 of the paper
             loss = start_loss + end_loss + coefs[0]*sup_loss + coefs[1]*type_loss # formula 15
 
             loss.backward(retain_graph=True)
-            losses.append(loss.item()) # for logging purposes #TODO log all 4 individual losses separately?
-
+            losses.append( (loss.item(),
+                            sup_loss.item(),
+                            start_loss.item(),
+                            end_loss.item(),
+                            type_loss.item()) ) # for logging purposes
 
             batch_counter += 1
             # Evaluate on validation set after some iterations
@@ -215,11 +222,12 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
                                                       ps_threshold = ps_threshold,
                                                       text_length = text_length)
                 score = metrics["joint_f1"]
+                dev_scores.append(metrics) # appends the whole dict of metrics
                 if score > best_score:
                     print(
                         f"Better eval found with accuracy {round(score, 3)} (+{round(score - best_score, 3)})")
                     best_score = score
-                    torch.save(net, model_save_path)
+                    torch.save(net, model_save_path) #TODO make sure that this works (maybe, should we save each of the 3 parts indvidually?)
                     a_model_was_saved_at_some_point = True
                 else:
                     print(f"No improvement yet...")
@@ -231,13 +239,15 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
         timer(f"training_epoch_{epoch}")
 
     if not a_model_was_saved_at_some_point:  # make sure that there is a model file
-        torch.save(net, model_save_path) #TODO make sure that this works
+        torch.save(net, model_save_path) #TODO make sure that this works (maybe have a method that saves all 3 parts individually?)
 
-    return (losses, timer) if timed else losses
+    losses_with_batchsizes = [(b, t[0], t[1], t[2], t[3], t[4]) for b,t in zip(real_batch_sizes, losses)]
+    return (losses_with_batchsizes, dev_scores, timer) if timed else (losses_with_batchsizes, dev_scores)
 
 def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1):
     """
-
+    # TODO docstring
+    #TODO make this a methof of DFGN
     :param net:
     :param query:
     :param context:
@@ -375,9 +385,9 @@ if __name__ == '__main__':
     #TODO change path assignment to fit with the program
     model_abs_path = cfg('model_abs_dir') + args.model_name + "/"
     model_filepath = model_abs_path + args.model_name
-    #model_abs_path += '.pt' if not args.model_name.endswith('.pt') else '' #CLEANUP
-    losses_abs_path = model_abs_path + "losses"
+    losses_abs_path = model_abs_path + "losses" # contains (batch_size, overall_loss, sup_l., start_l., end_l., type_l.)
     traintime_abs_path = model_abs_path + "times"
+    devscores_abs_path = model_abs_path + "devscores"
 
     eval_data_dump_dir = cfg("eval_data_dump_dir")
     eval_data_dump_filepath =  eval_data_dump_dir + "gold"
@@ -451,10 +461,9 @@ if __name__ == '__main__':
     dfgn = DFGN(text_length=cfg("text_length"),
                 emb_size=cfg("emb_size"),
                 fb_dropout=cfg("fb_dropout"),
-                predictor_dropout=cfg("predictor_dropout")) #TODO make sure this works; maybe include parameters from the config?
+                predictor_dropout=cfg("predictor_dropout"))
 
-    #TODO extract the loading of the NER tagger to somewhere outside training/batches
-    losses, times = train(dfgn,
+    losses, dev_scores, train_times = train(dfgn,
                           train_data_raw, # in batches
                           dev_data_raw,
                           eval_data_dump_filepath, # for dumping processed dev_data_raw
@@ -476,12 +485,28 @@ if __name__ == '__main__':
     take_time("training")
 
 
+    # ========== LOGGING
+    print(f"Saving losses in {losses_abs_path}...")
+    with open(losses_abs_path, "w") as f:
+        f.write("batch_size\toverall_loss\tsup_loss\tstart_loss\tend_loss\ttype_loss\n")
+        f.write("\n".join(["\t".join([str(l) for l in step]) for step in losses]))
 
-    take_time.total()
-    print("times for training:")
-    print(times)
-    print("\noverall times:")
-    print(take_time)
+    print(f"Saving dev scores in {devscores_abs_path}...")
+    with open(devscores_abs_path, "w") as f:
+        for metrics_dict in dev_scores:
+            f.write(str(metrics_dict)) # this can be parsed with ast.literal_eval() later on
+
+    print(f"Saving config and times taken to {traintime_abs_path}...")
+    with open(traintime_abs_path, 'w', encoding='utf-8') as f:
+        f.write("Configuration in: " + args.config_file + "\n")
+        f.write(str(cfg)+"\n")
+
+        f.write("\n Times taken per step:\n" + str(train_times) + "\n")
+        take_time("saving results")
+        take_time.total()
+        f.write("\n Overall times taken:\n" + str(take_time) + "\n")
+
+    print("\nTimes taken:\n", take_time)
     print("done.")
 
 

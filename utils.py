@@ -342,11 +342,13 @@ class HotPotDataHandler():
                     supp_facts_detailed[fact[0]].append(fact[1])
                 else:
                     supp_facts_detailed[fact[0]] = [fact[1]]
-            result.append(tuple((point["_id"],
-                                 supp_facts_detailed, # we used to use supp_facts here
-                                 point["question"],
-                                 point["context"],
-                                 point["answer"])))
+            result.append([
+                           point["_id"],
+                           supp_facts_detailed, # we used to use supp_facts here
+                           point["question"],
+                           point["context"],
+                           point["answer"]
+                         ])
         return result
 
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
@@ -375,10 +377,10 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     M = len(graph.tokens)
 
-    sup_labels = torch.zeros(M, dtype=torch.long)
-    start_labels = torch.zeros(M, dtype=torch.long)
-    end_labels = torch.zeros(M, dtype=torch.long)
-    type_labels = torch.zeros(1, dtype=torch.long)
+    sup_labels = torch.zeros(M)
+    start_labels = torch.zeros(M)
+    end_labels = torch.zeros(M)
+    type_labels = torch.zeros(1, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
 
     answer = raw_point[4].lower()
 

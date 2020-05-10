@@ -67,7 +67,7 @@ class Predictor(nn.Module):
         Ct = context_emb.unsqueeze(0) # (1, M, d2)
 
         o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
-        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
+        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
         start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
@@ -79,12 +79,12 @@ class Predictor(nn.Module):
         o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)
         type_scores = self.linear_type(o_type) 		# (1, M*d_2) -> (1, 3)
 
-        result = (sup_scores.squeeze(0), \
-                 start_scores.squeeze(0), \
-                 end_scores.squeeze(0), \
-                 type_scores)
+        result = (sup_scores.squeeze(0).squeeze(-1), \
+                 start_scores.squeeze(0).squeeze(-1), \
+                 end_scores.squeeze(0).squeeze(-1), \
+                 type_scores) #TODO? .squeeze(-1) ?
 
-        return result
+        return result # ( (M), (M), (M), (1,3) )
 
 
 
