@@ -378,7 +378,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     M = len(graph.tokens)
 
     sup_labels = torch.zeros(M)
-    start_labels = torch.zeros(M)
+    start_labels = torch.zeros(M) #TODO change this to (1)
     end_labels = torch.zeros(M)
     type_labels = torch.zeros(1, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
 
@@ -394,7 +394,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
 
     # if the answer is not "yes" or "no", its a span
     if type_labels[0] == 2:
-        for i, token in enumerate(graph.tokens):
+        for i, token in enumerate(graph.tokens): #TODO change this so that start/end labels only have 1 number (i.e., the position of the start token)
             if answer.startswith(token):
                 start_labels[i]=1
             if answer.endswith(token):

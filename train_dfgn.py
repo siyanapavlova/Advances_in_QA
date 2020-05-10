@@ -88,8 +88,6 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     flair.device = torch.device(tagger_device)
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
-    bce_criterion = torch.nn.BCELoss() # for prediction of start, end, and sup_facts
-    criterion = torch.nn.CrossEntropyLoss() # for prediction of answer type
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
     losses = []
@@ -168,8 +166,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
                 graphs[i].M = g.M.to(device) # work with enumerate to actually mutate the graph objects
 
             sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
-            start_labels = torch.stack(start_labels).to(device)  # (batch, M)
-            end_labels = torch.stack(end_labels).to(device)      # (batch, M)
+            start_labels = torch.stack(start_labels).to(device)  # (batch, M) #TODO change these comments to (batch, 1)
+            end_labels = torch.stack(end_labels).to(device)      # (batch, M) #TODO change these comments to (batch, 1)
             type_labels = torch.stack(type_labels).to(device)    # (batch)
 
 
@@ -192,12 +190,17 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             types =  torch.stack(types)  # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
-            sup_loss =   bce_criterion(sups,   sup_labels)
-            start_loss = bce_criterion(starts, start_labels)
-            end_loss =   bce_criterion(ends,   end_labels)
-            type_loss =      criterion(types,  type_labels)
+            sup_tokens = #TODO make weights
+            sup_criterion = torch.nn.CrossEntropyLoss(weight=[])  # for prediction of answer type
+            criterion = torch.nn.CrossEntropyLoss()  # for prediction of answer type
+
+            sup_loss =   sup_criterion(sups,   sup_labels)
+            start_loss = criterion(starts, start_labels) # (batch, M, 1), (batch, 1)
+            end_loss =   criterion(ends,   end_labels)
+            type_loss =  criterion(types,  type_labels)
 
             # This doesn't have the weak supervision BFS mask stuff from section 3.5 of the paper
+            #TODO? maybe start training with start/end loss only first, then train another model on all 4 losses?
             loss = start_loss + end_loss + coefs[0]*sup_loss + coefs[1]*type_loss # formula 15
 
             loss.backward(retain_graph=True)

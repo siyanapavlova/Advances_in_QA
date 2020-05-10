@@ -51,10 +51,10 @@ class Predictor(nn.Module):
         self.f2 = nn.LSTM(3*d2, d2)
         self.f3 = nn.LSTM(3*d2, d2)
 
-        self.linear_sup = Linear(d2, 1, dropout=dropout) # this is not in the original paper(s)
-        self.linear_start = Linear(d2, 1, dropout=dropout)
-        self.linear_end = Linear(d2, 1, dropout=dropout)
-        self.linear_type = Linear(M*d2, 3, dropout=dropout) # 3 because we have 3 types - yes, no, and span
+        self.linear_sup =   Linear(d2, 2, dropout=dropout) # have 2 output dims because we need to weight the classes
+        self.linear_start = Linear(d2, 1, dropout=dropout) # with a softmax because there can only be one start or end
+        self.linear_end =   Linear(d2, 1, dropout=dropout)
+        self.linear_type =  Linear(d2, 3, dropout=dropout)  # 3 because we have 3 types - yes, no, and span
 
 
     def forward(self, context_emb):
@@ -67,16 +67,16 @@ class Predictor(nn.Module):
         Ct = context_emb.unsqueeze(0) # (1, M, d2)
 
         o_sup, hidden_o_sup = self.f0(Ct)   # (1, M, d_2) -> (1, M, d_2)
-        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
+        sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 2)
 
         o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
-        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
+        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 2) #TODO in the comments: change last dimension from '2' to '1'?
+        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
 
         o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-        o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2)
+        o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2) #TODO change this so that the last hidden is taken and then passed to the Linear layer
         type_scores = self.linear_type(o_type) 		# (1, M*d_2) -> (1, 3)
 
         result = (sup_scores.squeeze(0).squeeze(-1), \
