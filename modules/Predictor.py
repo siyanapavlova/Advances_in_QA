@@ -70,16 +70,17 @@ class Predictor(nn.Module):
         sup_scores = self.linear_sup(o_sup) # (1, M, d_2) -> (1, M, 2)
 
         o_start, hidden_o_start = self.f1(torch.cat((Ct, o_sup), dim=-1))  	   # (1, M, 2*d_2) -> (1, M, d_2)
-        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
+        start_scores = self.linear_start(o_start) 						       # (1, M, d_2) -> (1, M, 1)
 
         o_end, hidden_o_end = self.f2(torch.cat((Ct, o_sup, o_start), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1) #TODO in the comments: change last dimension from '2' to '1'?
+        end_scores = self.linear_end(o_end) 								   # (1, M, d_2) -> (1, M, 1)
 
         o_type, hidden_o_type = self.f3(torch.cat((Ct, o_sup, o_end), dim=-1)) # (1, M, 3*d_2) -> (1, M, d_2)
-        o_type = o_type.view(1, o_type.shape[1]*o_type.shape[2])               # (1, M*d_2) #TODO change this so that the last hidden is taken and then passed to the Linear layer
-        type_scores = self.linear_type(o_type) 		# (1, M*d_2) -> (1, 3)
+        #o_type =  o_type.view(o_type.shape[1], o_type.shape[0], 1, o_type.shape[2])[-1] # select the last output state: (1, d2) #CLEANUP?
+        o_type = o_type.mean(1).squeeze(1) # use mean pooling over the sequence: (1, d2)
+        type_scores = self.linear_type(o_type) 		                           # (1, d_2) -> (1, 3)
 
-        result = (sup_scores.squeeze(0).squeeze(-1), \
+        result = (sup_scores.squeeze(0), \
                  start_scores.squeeze(0).squeeze(-1), \
                  end_scores.squeeze(0).squeeze(-1), \
                  type_scores) #TODO? .squeeze(-1) ?

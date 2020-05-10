@@ -166,8 +166,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
                 graphs[i].M = g.M.to(device) # work with enumerate to actually mutate the graph objects
 
             sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
-            start_labels = torch.stack(start_labels).to(device)  # (batch, M) #TODO change these comments to (batch, 1)
-            end_labels = torch.stack(end_labels).to(device)      # (batch, M) #TODO change these comments to (batch, 1)
+            start_labels = torch.stack(start_labels).to(device)  # (batch, 1)
+            end_labels = torch.stack(end_labels).to(device)      # (batch, 1)
             type_labels = torch.stack(type_labels).to(device)    # (batch)
 
 
@@ -178,26 +178,30 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             sups, starts, ends, types = [], [], [], []
             for query, context, graph in zip(q_ids_list, c_ids_list, graphs): # 'graph' is not a tensor -> for-loop instead of batch processing
 
-                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes) # (M), (M), (M), (1, 3)
+                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes) # (M, 2), (M), (M), (1, 3)
                 sups.append(o_sup)
                 starts.append(o_start)
                 ends.append(o_end)
                 types.append(o_type)
 
-            sups =   torch.stack(sups)   # (batch, M)
+            sups =   torch.stack(sups)   # (batch, M, 2)
             starts = torch.stack(starts) # (batch, M)
             ends =   torch.stack(ends)   # (batch, M)
             types =  torch.stack(types)  # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
-            sup_tokens = #TODO make weights
-            sup_criterion = torch.nn.CrossEntropyLoss(weight=[])  # for prediction of answer type
+            weights = torch.ones(2) #TODO maybe extract this to a tiny function?
+            sup_label_batch = sup_labels.view(-1)
+            weights[0] = sum(sup_label_batch)/float(sup_label_batch.shape[0])
+            weights[1] -= weights[0] # assign the opposite weight
+
+            sup_criterion = torch.nn.CrossEntropyLoss(weight=weights)
             criterion = torch.nn.CrossEntropyLoss()  # for prediction of answer type
 
-            sup_loss =   sup_criterion(sups,   sup_labels)
-            start_loss = criterion(starts, start_labels) # (batch, M, 1), (batch, 1)
-            end_loss =   criterion(ends,   end_labels)
-            type_loss =  criterion(types,  type_labels)
+            sup_loss =   sup_criterion(sups.view(-1,2), sup_label_batch) # (batch*M, 2), (batch*M)
+            start_loss = criterion(starts, start_labels)   # (batch, M, 1), (batch, 1)
+            end_loss =   criterion(ends,   end_labels)     # (batch, M, 1), (batch, 1)
+            type_loss =  criterion(types,  type_labels)    # (batch, 1, 3), (batch, 1)
 
             # This doesn't have the weak supervision BFS mask stuff from section 3.5 of the paper
             #TODO? maybe start training with start/end loss only first, then train another model on all 4 losses?
@@ -212,7 +216,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
 
             batch_counter += 1
             # Evaluate on validation set after some iterations
-            if batch_counter % eval_interval == 0: #TODO change batched_interval to evaluate every n batches (instead of n data points)
+            if batch_counter % eval_interval == 0:
 
                 # this calls the official evaluation script (altered to return metrics)
                 metrics = evaluate(net,  para_selector, dev_data, #TODO sort these parameters!!!!

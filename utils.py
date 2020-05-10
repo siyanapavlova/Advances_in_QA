@@ -378,8 +378,8 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     M = len(graph.tokens)
 
     sup_labels = torch.zeros(M)
-    start_labels = torch.zeros(M) #TODO change this to (1)
-    end_labels = torch.zeros(M)
+    start_label = torch.zeros(1)
+    end_label = torch.zeros(1)
     type_labels = torch.zeros(1, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
 
     answer = raw_point[4].lower()
@@ -394,11 +394,11 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
 
     # if the answer is not "yes" or "no", its a span
     if type_labels[0] == 2:
-        for i, token in enumerate(graph.tokens): #TODO change this so that start/end labels only have 1 number (i.e., the position of the start token)
-            if answer.startswith(token):
-                start_labels[i]=1
+        for i, token in enumerate(graph.tokens):
+            if answer.startswith(token) and start_label==0:
+                start_label = i # take the first start token's index as the label
             if answer.endswith(token):
-                end_labels[i]=1
+                end_label = i # take the last end token's index as label
 
     # get supporting facts (paragraphs)
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph
@@ -420,7 +420,7 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
             position += sum([len(sent) for sent in tokenized_sentences[i]])
             sent_position += len(tokenized_sentences[i])
 
-    return sup_labels, start_labels, end_labels, type_labels # M, M, M, 1
+    return sup_labels, start_label, end_label, type_labels # M, M, M, 1
 
 def sentence_lengths(context, tokenizer):
     """
