@@ -377,9 +377,9 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     M = len(graph.tokens)
 
-    sup_labels = torch.zeros(M)
-    start_label = torch.zeros(1)
-    end_label = torch.zeros(1)
+    sup_labels = torch.zeros(M, dtype=torch.long)
+    start_label = torch.zeros(1, dtype=torch.long)
+    end_label = torch.zeros(1, dtype=torch.long)
     type_labels = torch.zeros(1, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
 
     answer = raw_point[4].lower()
@@ -396,9 +396,9 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     if type_labels[0] == 2:
         for i, token in enumerate(graph.tokens):
             if answer.startswith(token) and start_label==0:
-                start_label = i # take the first start token's index as the label
+                start_label[0] = i # take the first start token's index as the label
             if answer.endswith(token):
-                end_label = i # take the last end token's index as label
+                end_label[0] = i # take the last end token's index as label
 
     # get supporting facts (paragraphs)
     list_context = [[p[0] + " "] + p[1] for p in graph.context]  # squeeze header into the paragraph

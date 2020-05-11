@@ -185,8 +185,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
                 types.append(o_type)
 
             sups =   torch.stack(sups)   # (batch, M, 2)
-            starts = torch.stack(starts) # (batch, M)
-            ends =   torch.stack(ends)   # (batch, M)
+            starts = torch.stack(starts) # (batch, 1, M)
+            ends =   torch.stack(ends)   # (batch, 1, M)
             types =  torch.stack(types)  # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
@@ -198,10 +198,12 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             sup_criterion = torch.nn.CrossEntropyLoss(weight=weights)
             criterion = torch.nn.CrossEntropyLoss()  # for prediction of answer type
 
+            # use .view(-1,...) to put points together (this is like summing the points' losses)
             sup_loss =   sup_criterion(sups.view(-1,2), sup_label_batch) # (batch*M, 2), (batch*M)
-            start_loss = criterion(starts, start_labels)   # (batch, M, 1), (batch, 1)
-            end_loss =   criterion(ends,   end_labels)     # (batch, M, 1), (batch, 1)
-            type_loss =  criterion(types,  type_labels)    # (batch, 1, 3), (batch, 1)
+
+            start_loss = sum([criterion(starts[i], start_labels[i]) for i in range(start_labels.shape[0])])  # batch * ( (1, M, 1), (1) )
+            end_loss   = sum([criterion(ends[i], end_labels[i]) for i in range(end_labels.shape[0])])        # batch * ( (1, M, 1), (1) )
+            type_loss  =  criterion(types.view(-1,3),  type_labels.view(-1))    # (batch, 1, 3), (batch, 1)
 
             # This doesn't have the weak supervision BFS mask stuff from section 3.5 of the paper
             #TODO? maybe start training with start/end loss only first, then train another model on all 4 losses?
@@ -219,21 +221,18 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             if batch_counter % eval_interval == 0:
 
                 # this calls the official evaluation script (altered to return metrics)
-                metrics = evaluate(net,  para_selector, dev_data, #TODO sort these parameters!!!!
-                                                      dev_data_filepath,
-                                                      dev_preds_filepath,
-                                                      ner_tagger,
-                                                      tokenizer,
-                                                      device,
-                                                      fb_passes = fb_passes,
-                                                      ps_threshold = ps_threshold,
-                                                      text_length = text_length)
+                metrics = evaluate(net, dev_data,
+                                   tokenizer, ner_tagger, para_selector,
+                                   device, dev_data_filepath, dev_preds_filepath,
+                                   fb_passes = fb_passes,
+                                   ps_threshold = ps_threshold,
+                                   text_length = text_length)
                 score = metrics["joint_f1"]
                 dev_scores.append(metrics) # appends the whole dict of metrics
                 if score > best_score:
-                    print(
-                        f"Better eval found with accuracy {round(score, 3)} (+{round(score - best_score, 3)})")
+                    print(f"Better eval found with accuracy {round(score, 3)} (+{round(score - best_score, 3)})")
                     best_score = score
+
                     torch.save(net, model_save_path) #TODO make sure that this works (maybe, should we save each of the 3 parts indvidually?)
                     a_model_was_saved_at_some_point = True
                 else:
@@ -254,7 +253,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
 def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1):
     """
     # TODO docstring
-    #TODO make this a methof of DFGN
+    #TODO make this a method of DFGN
     :param net:
     :param query:
     :param context:
@@ -265,7 +264,7 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
     :return:
     """
 
-    # (M), (M), (M), (1,3)
+    # (M,2), (1,M), (1,M), (1,3)
     o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
 
     # =========== GET ANSWERS
@@ -286,7 +285,10 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
     sup_fact_pairs = []
     for para, s_lens in zip(context, sentence_lengths):
         for j, s_len in enumerate(s_lens):
-            score = round(sum(o_sup[pos: pos + s_len]) / s_len)  # take avg of token-wise scores and round to 0 or 1
+            #score = round(sum(o_sup.argmax([pos: pos + s_len])) / s_len)
+            # take avg of token-wise scores and round to 0 or 1
+
+            score = round(float(sum([x.argmax() for x in o_sup.T[pos: pos + s_len]]) / float(s_len)))
             if score == 1:
                 sup_fact_pairs.append([para[0], j])
             pos += s_len
@@ -294,15 +296,12 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
     return answer, sup_fact_pairs
 
 
-def evaluate(net, dev_data, para_selector,
-             eval_data_filepath, eval_preds_filepath,
-             ner_tagger, tokenizer, device,
+def evaluate(net, dev_data,
+             tokenizer, ner_tagger, para_selector,
+             device, eval_data_filepath, eval_preds_filepath,
              fb_passes = 1, ps_threshold = 0.1, text_length = 250):
-    # ps_path,
-    # ner_with_gpu = False, try_training_on_gpu = True,
-    # eval_interval = None, timed = False
     """
-
+    #TODO docstring
     :param net:
     :param dev_data:
     :return:
@@ -329,7 +328,7 @@ def evaluate(net, dev_data, para_selector,
     graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
 
     # required for prediction in the right format
-    sentence_lengths = [utils.sentence_lengths(c, tokenizer) for c in contexts]
+    s_lens_batch = [utils.sentence_lengths(c, tokenizer) for c in contexts]
 
     # turn the texts into tensors in order to put them on the GPU
     qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)]  # list[ (list[int], list[int]) ]
@@ -338,7 +337,7 @@ def evaluate(net, dev_data, para_selector,
     c_ids_list = [torch.tensor(c).to(device) for c in c_ids]  # list[Tensor]
 
     for i,g in enumerate(graphs):
-        graphs[i].M = g.M.to(device)  # work with enumerate to actualy mutate the graph objects
+        graphs[i].M = g.M.to(device)  # work with enumerate to actually mutate the graph objects
 
 
     """ MAKE LABELS IF NECESSARY"""
@@ -359,14 +358,16 @@ def evaluate(net, dev_data, para_selector,
     answers = {} # {question_id: str} (either "yes", "no" or a string containing the answer)
     sp = {} # {question_id: list[list[paragraph_title, sent_num]]}
 
-    for i, (query, context, graph) in enumerate(zip(q_ids_list, c_ids_list, graphs)):
-        answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=fb_passes)
+    for i, (query, context, graph, s_lens) in enumerate(zip(q_ids_list, c_ids_list, graphs, s_lens_batch)):
+        answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, s_lens, fb_passes=fb_passes)
 
         answers[dev_data[i][0]] = answer  # {question_id: str}
         sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
+        # TODO 2020-05-10: continue here: why key error?
 
-    with open(eval_data_filepath, 'w') as f:
+    with open(eval_preds_filepath, 'w') as f:
         json.dump( {"answer":answers, "sp":sp} , f)
+
 
     """ EVALUATION """
     return official_eval_script.eval(eval_preds_filepath, eval_data_filepath) #TODO return aything else than the metrics?
