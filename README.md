@@ -22,10 +22,12 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 ### External and Internal Modules
 - `utils.py` (local) provides helper functions and classes.
 - `tqdm` for progress bars. [(get it here)](https://tqdm.github.io/ "Github")
-- `flair` for named entity recognition (NER) [(get it here)](https://github.com/flairNLP/flair)
+- `flair` for named entity recognition (NER) [(get it here)](https://github.com/flairNLP/flair). `Python 3.8` and above cause issues with `flair`, so use a lower version
 - `pycorenlp.StanfordCoreNLP` for NER (not necessary) [(get it here)](https://stanfordnlp.github.io/CoreNLP/other-languages.html)
 - `transformers` by Huggingface, supplying BERT [(get it here)](https://github.com/huggingface/transformers#installation)
 - `sklearn` mainly for evaluation [(get it here)](https://github.com/scikit-learn/scikit-learn)
+- `ujson` for running the official HotPotQA evaluation script [(get it here)](https://github.com/ultrajson/ultrajson)
+- `pandas` [(get it here)](https://github.com/pandas-dev/pandas)
 
 
 
@@ -97,7 +99,7 @@ Note that there is no control of whether all parameters that are required for th
 
 - `modules/` — the main modules of the architecture
     - `ParagraphSelector.py` - implements the Paragraph Selector from the paper (section 3.1)
-    - `EntityGraph.py`- implements the Graph Constructor from the paper (section 3.2) and build the binary matrix used in section 3.4
+    - `EntityGraph.py`- implements the Graph Constructor from the paper (section 3.2) and builds the binary matrix used in section 3.4
     - `Encoder.py` - implements the Encoder from the paper (section 3.3)
     - `FusionBlock.py` - implements the Fusion Block from the paper (section 3.4)
     - `Predictor.py` - implements the LSTM Prediction Layer from the paper (section 3.5)
