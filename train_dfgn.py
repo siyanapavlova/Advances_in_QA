@@ -118,10 +118,7 @@ def train(net, train_data, #dev_data,
         print('Epoch %d/%d' % (epoch + 1, epochs))
         batch_counter = 0
 
-        for step, batch_start in enumerate(tqdm(range(0, len(train_data), batch_size), desc="Iteration")):
-            batch = train_data[batch_start:batch_start+batch_size]
-            print(f"batch indicees: {batch_start}, {batch_start+batch_size}") #CLEANUP
-            print(f"type of batch: {type(batch)}")
+        for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
 
             """ DATA PROCESSING """
             ids = []
