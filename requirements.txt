@@ -7,3 +7,4 @@ flair
 pycorenlp
 transformers
 sklearn
+ujson
