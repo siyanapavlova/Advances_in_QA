@@ -121,8 +121,6 @@ def train(net, train_data, #dev_data,
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
 
             """ DATA PROCESSING """
-            print(f"working n the following points: {[point[0] for point in batch]}") #ClEANUP
-
             queries = [point[2] for point in batch]
 
             # make a list[ list[str, list[str]] ] for each point in the batch
