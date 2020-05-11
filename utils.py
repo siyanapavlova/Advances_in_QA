@@ -317,7 +317,7 @@ class HotPotDataHandler():
         content = "\n".join([str(k) for k in self.data[0].keys()]).rstrip()
         return header+content
 
-    def data_for_paragraph_selector(self):
+    def data_for_paragraph_selector(self): #TODO maybe, if you're bored and there is another lockdown, rename this.
         """
         This method makes what is called "raw_point" in other parts of the project.
 
@@ -354,31 +354,43 @@ class HotPotDataHandler():
                          ])
         return result
 
-    def select_and_dump_data_for_evaluation_during_training(self, para_selector, dev_data, destination, cfg):
+    def make_eval_data(self, para_selector, dev_data, destination, cfg):
+        """
+        TODO docstring
+        :param para_selector:
+        :param dev_data:
+        :param destination:
+        :param cfg:
+        :return:
+        """
         id_to_list_index = {point['_id']: i for i, point in enumerate(self.data)}
 
         eval_data = []
         for point in dev_data:
-            context = para_selector.make_context(point, threshold=cfg("ps_threshold"),
-                                                        context_length=cfg("text_length"))
+            context = para_selector.make_context(point, # TODO sort out parameter passing via config (this should use the gpu if possible)
+                                                 threshold=cfg("ps_threshold"),
+                                                 context_length=cfg("text_length"))
             # get the datapoint from the original data with the same '_id' as the point we are looking at
             original_point = self.data[id_to_list_index[point[0]]]
             original_point['context'] = context
 
-            new_sup_facts = []
-            # for para in context:
-            #     if para[0] in original_point['supporting_facts']
+            sup_facts_lc = {p_title.lower():s_idxs for p_title,s_idxs in point[1].items()} # dict{str:list[int]}
+            new_sup_facts = [] # same structure as in the original data: list[list[str,int]]
 
-            sup_fact_titles = [title.lower() for title, _ in original_point['supporting_facts']]
 
-            for para in context:
-                if para[0] in sup_fact_titles:
-                    pass  # do stuff here
+            for title, sentences in context:
+                if title in sup_facts_lc: # compare to lower-cased
+                    for sent_idx in sup_facts_lc[title]:  #
+                        # if the sentence with index sent_idx is in the paragraph (has not been cropped out by PS)
+                        if sent_idx < len(sentences):
+                            new_sup_facts.append([title, sent_idx])
+
+            original_point['supporting_facts'] = new_sup_facts
 
             eval_data.append(original_point)
 
         with open(destination, 'w') as f:
-            json.dump(eval_data)
+            json.dump(eval_data, f)
 
 
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
@@ -464,7 +476,7 @@ def sentence_lengths(context, tokenizer):
     sentence_lengths = [[len(s) for s in p] for p in tokenized_sentences]  # list[list[int]]
     return sentence_lengths
 
-def make_eval_data(raw_points):
+def make_eval_data_DEPRECATED(raw_points): #CLEANUP?
     """
     TODO: docstring
     format the data point to the form of the official evaluation script

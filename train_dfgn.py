@@ -16,10 +16,9 @@ import flair # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 import utils
 
-#TODO 2020-05-07: implement periodic evaluation during training; test dfgn; start big training
 
 class DFGN(torch.nn.Module): # TODO extract this to a separate module
-    #TODO implement loading of a previously trained DFGN model (for final evaluation!)
+    #TODO? implement loading of a previously trained DFGN model (for final evaluation!) ?
     def __init__(self, text_length, emb_size,
                  fb_dropout=0.5, predictor_dropout=0.3):
         #TODO docstring
@@ -55,7 +54,8 @@ class DFGN(torch.nn.Module): # TODO extract this to a separate module
 
         return outputs
 
-def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, model_save_path,
+def train(net, train_data, #dev_data,
+          dev_data_filepath, dev_preds_filepath, model_save_path,
           para_selector, #TODO sort these nicely
           ps_threshold=0.1,
           ner_with_gpu=False, try_training_on_gpu=True,
@@ -81,7 +81,8 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     """
     timer = utils.Timer()
 
-    # para_selector = ParagraphSelector.ParagraphSelector(ps_path) #CLEANUP
+    # para_selector = ParagraphSelector.ParagraphSelector(ps_path) #CLEANUP as this is already done before
+
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     tagger_device = 'gpu' if ner_with_gpu else 'cpu'
@@ -147,7 +148,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             # turn the texts into tensors in order to put them on the GPU
             qc_ids = [net.encoder.token_ids(q, c) for q, c in zip(queries, contexts)] # list[ (list[int], list[int]) ]
             q_ids, c_ids = list(zip(*qc_ids)) # tuple(list[int]), tuple(list[int])
-            q_ids_list = [torch.tensor(q) for q in q_ids] # list[Tensor]
+            q_ids_list = [torch.tensor(q) for q in q_ids] # list[Tensor] #TODO? maybe put this into forward()?
             c_ids_list = [torch.tensor(c) for c in c_ids] # list[Tensor]
 
             """ MAKE TRAINING LABELS """
@@ -221,11 +222,10 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             if batch_counter % eval_interval == 0:
 
                 # this calls the official evaluation script (altered to return metrics)
-                metrics = evaluate(net, dev_data,
-                                   tokenizer, ner_tagger, para_selector,
+                metrics = evaluate(net, #TODO make this prettier
+                                   tokenizer, ner_tagger,
                                    device, dev_data_filepath, dev_preds_filepath,
                                    fb_passes = fb_passes,
-                                   ps_threshold = ps_threshold,
                                    text_length = text_length)
                 score = metrics["joint_f1"]
                 dev_scores.append(metrics) # appends the whole dict of metrics
@@ -245,6 +245,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
         timer(f"training_epoch_{epoch}")
 
     if not a_model_was_saved_at_some_point:  # make sure that there is a model file
+        print(f"saving model to {model_save_path}...")
         torch.save(net, model_save_path) #TODO make sure that this works (maybe have a method that saves all 3 parts individually?)
 
     losses_with_batchsizes = [(b, t[0], t[1], t[2], t[3], t[4]) for b,t in zip(real_batch_sizes, losses)]
@@ -296,10 +297,10 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
     return answer, sup_fact_pairs
 
 
-def evaluate(net, dev_data,
-             tokenizer, ner_tagger, para_selector,
+def evaluate(net,
+             tokenizer, ner_tagger,
              device, eval_data_filepath, eval_preds_filepath,
-             fb_passes = 1, ps_threshold = 0.1, text_length = 250):
+             fb_passes = 1, text_length = 250):
     """
     #TODO docstring
     :param net:
@@ -308,15 +309,12 @@ def evaluate(net, dev_data,
     """
 
     """ PREPADE DATA FOR PREDICTION """
+    dh = utils.HotPotDataHandler(eval_data_filepath)
+    dev_data = dh.data_for_paragraph_selector()
+
     point_ids = [point[0] for point in dev_data] # needed to handle useless datapoints
-
     queries = [point[2] for point in dev_data]
-
-    # make a list[ list[str, list[str]] ] for each point in the batch
-    contexts = [para_selector.make_context(point,
-                                           threshold=ps_threshold,
-                                           context_length=text_length)
-                for point in dev_data]
+    contexts = [point[3] for point in dev_data]
 
     graphs = [EntityGraph.EntityGraph(c,
                                       context_length=text_length,
@@ -343,20 +341,6 @@ def evaluate(net, dev_data,
         graphs[i].M = g.M.to(device)  # work with enumerate to actually mutate the graph objects
 
 
-    """ MAKE LABELS IF NECESSARY"""
-    #try: # check whether eval_data_filepath exists .... #CLEANUP?
-    #    f = open(eval_data_filepath, "r")
-    #    f.close()
-    #except FileNotFoundError: # ... If not, make labeled data and write it to eval_data_filepath.
-    for (i, p), c in zip(enumerate(dev_data), contexts):
-        dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
-    eval_data = utils.make_eval_data(dev_data)
-
-    with open(eval_data_filepath, 'w') as f:
-        json.dump(eval_data, f)
-
-        #TODO pass dev_data_filepath through the whole script
-
     """ FORWARD PASSES """
     answers = {}  # {question_id: str} (either "yes", "no" or a string containing the answer)
     sp = {}  # {question_id: list[list[paragraph_title, sent_num]]} (supporting sentences)
@@ -369,13 +353,8 @@ def evaluate(net, dev_data,
     for i, (query, context, graph, s_lens) in enumerate(zip(q_ids_list, c_ids_list, graphs, s_lens_batch)):
         answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, s_lens, fb_passes=fb_passes)
 
-        print(f"in train_dfgn.evaluate(): dev_data[i]: {dev_data[i]}\n")  # CLEANUP
-        print(f"in train_dfgn.evaluate(): answer: {answer}") #CLEANUP
-        print(f"in train_dfgn.evaluate(): sup_fact_pairs: {sup_fact_pairs}\n")  # CLEANUP
-
         answers[dev_data[i][0]] = answer  # {question_id: str}
         sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
-        # TODO 2020-05-10: continue here: why key error?
 
     with open(eval_preds_filepath, 'w') as f:
         json.dump( {"answer":answers, "sp":sp} , f)
@@ -485,13 +464,10 @@ if __name__ == '__main__':
 
     para_selector = ParagraphSelector.ParagraphSelector(cfg("ps_model_abs_path"))
 
-    #TODO use the PS to make eval data (and dump it) with that datahandler long-ass named function
-    dh.select_and_dump_data_for_evaluation_during_training(para_selector,
-                                                           dev_data_raw,
-                                                           eval_data_dump_filepath,
-                                                           cfg)
-
-    #TODO the PS-processed dev data doesn't have to be passed (heck, it doesn't even have to be in memory!)
+    dh.make_eval_data(para_selector,
+                      dev_data_raw,
+                      eval_data_dump_filepath,
+                      cfg)
 
     dfgn = DFGN(text_length=cfg("text_length"),
                 emb_size=cfg("emb_size"),
@@ -500,7 +476,7 @@ if __name__ == '__main__':
 
     losses, dev_scores, train_times = train(dfgn, #TODO watch out with the parameter sorting!
                           train_data_raw, # in batches
-                          dev_data_raw, #TODO probably not needed anymore!
+                          #dev_data_raw, # not needed for pre-processing during evaluation
                           eval_data_dump_filepath, # for reading processed dev_data_raw
                           eval_preds_dump_filepath, # for dumping predictions during evaluation
                           model_filepath, # where the dfgn model will be saved
