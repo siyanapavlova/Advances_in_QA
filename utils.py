@@ -419,10 +419,10 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     M = len(graph.tokens)
 
-    sup_labels = torch.zeros(M, dtype=torch.long)
+    sup_labels = torch.zeros(M, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
     start_label = torch.zeros(1, dtype=torch.long)
     end_label = torch.zeros(1, dtype=torch.long)
-    type_labels = torch.zeros(1, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
+    type_labels = torch.zeros(1, dtype=torch.long)
 
     answer = raw_point[4].lower()
 

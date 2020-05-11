@@ -121,6 +121,8 @@ def train(net, train_data, #dev_data,
         for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
 
             """ DATA PROCESSING """
+            print(f"working n the following points: {[point[0] for point in batch]}") #ClEANUP
+
             queries = [point[2] for point in batch]
 
             # make a list[ list[str, list[str]] ] for each point in the batch
@@ -160,6 +162,7 @@ def train(net, train_data, #dev_data,
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)] # list[(support, start, end, type)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
+            print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
