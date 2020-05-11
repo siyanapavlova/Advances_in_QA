@@ -85,7 +85,7 @@ def train(net, train_data, #dev_data,
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    tagger_device = 'gpu' if ner_with_gpu else 'cpu'
+    tagger_device = 'cuda' if ner_with_gpu else 'cpu'
     flair.device = torch.device(tagger_device)
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
