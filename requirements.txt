@@ -8,3 +8,4 @@ pycorenlp
 transformers
 sklearn
 ujson
+pandas
