@@ -118,27 +118,36 @@ def train(net, train_data, #dev_data,
         print('Epoch %d/%d' % (epoch + 1, epochs))
         batch_counter = 0
 
-        for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
+        for step, batch_start in enumerate(tqdm(range(0, len(train_data), batch_size), desc="Iteration")):
+            batch = train_data[batch_start:batch_start+batch_size]
 
             """ DATA PROCESSING """
-            queries = [point[2] for point in batch]
+            ids = []
+            queries = []
+            contexts = []
+            graphs = []
 
-            # make a list[ list[str, list[str]] ] for each point in the batch
-            contexts = [para_selector.make_context(point,
-                                                   threshold=ps_threshold,
-                                                   context_length=text_length) #TODO add device and numerated arguments
-                        for point in batch]
+            useless_datapoint_inds = []
 
-            graphs = [EntityGraph.EntityGraph(c,
-                                              context_length=text_length,
-                                              tagger=ner_tagger)
-                      for c in contexts]
+            for i, point in enumerate(batch):
 
-            # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
-            useless_datapoint_inds = [i for i,g in enumerate(graphs) if not g.graph]
-            queries = [q for i,q in enumerate(queries) if i not in useless_datapoint_inds]
-            contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
-            graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
+                # make a list[ list[str, list[str]] ] for each point in the batch
+                context = para_selector.make_context(point,
+                                                       threshold=ps_threshold,
+                                                       context_length=text_length) #TODO add device and numerated arguments
+                graph = EntityGraph.EntityGraph(context,
+                                                  context_length=text_length,
+                                                  tagger=ner_tagger)
+                if graph.graph:
+                    ids.append(point[0])
+                    queries.append(point[2])
+                    contexts.append(context)
+                    graphs.append(graph)
+                else: # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
+                    useless_datapoint_inds.append(i)
+
+            batch = [point for point in batch if point[0] in ids] # update the batch to exclude useless data points
+
             real_batch_sizes.append(batch_size - len(useless_datapoint_inds)) #TODO track the batch sizes!
 
             # if our batch is completely useless, just continue with the next batch. :(
