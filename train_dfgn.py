@@ -56,7 +56,7 @@ class DFGN(torch.nn.Module): # TODO extract this to a separate module
         return outputs
 
 def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, model_save_path,
-          ps_path, #TODO sort these nicely
+          para_selector, #TODO sort these nicely
           ps_threshold=0.1,
           ner_with_gpu=False, try_training_on_gpu=True,
           text_length=250,
@@ -81,7 +81,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
     """
     timer = utils.Timer()
 
-    para_selector = ParagraphSelector.ParagraphSelector(ps_path)
+    # para_selector = ParagraphSelector.ParagraphSelector(ps_path) #CLEANUP
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     tagger_device = 'gpu' if ner_with_gpu else 'cpu'
@@ -483,9 +483,13 @@ if __name__ == '__main__':
 
     # ========== DFGN START
 
-    #TODO initialize Paragrah Selector and later pass it to train()
+    para_selector = ParagraphSelector.ParagraphSelector(cfg("ps_model_abs_path"))
 
     #TODO use the PS to make eval data (and dump it) with that datahandler long-ass named function
+    dh.select_and_dump_data_for_evaluation_during_training(para_selector,
+                                                           dev_data_raw,
+                                                           eval_data_dump_filepath,
+                                                           cfg)
 
     #TODO the PS-processed dev data doesn't have to be passed (heck, it doesn't even have to be in memory!)
 
@@ -500,7 +504,7 @@ if __name__ == '__main__':
                           eval_data_dump_filepath, # for reading processed dev_data_raw
                           eval_preds_dump_filepath, # for dumping predictions during evaluation
                           model_filepath, # where the dfgn model will be saved
-                          ps_path=cfg("ps_model_abs_path"),
+                          para_selector,
                           ps_threshold=cfg("ps_threshold"),
                           ner_with_gpu=cfg("use_gpu_for_ner"),
                           try_training_on_gpu=cfg("try_training_on_gpu"),
