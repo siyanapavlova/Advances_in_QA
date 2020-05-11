@@ -453,6 +453,7 @@ class ParagraphSelector():
 
             # do the actual prediction & decision
             encoded_p = torch.tensor([token_ids])
+            print(f"in ParagraphSelector.make_context: shape of encoded_p: {encoded_p.shape}") #CLEANUP
             score = self.predict(encoded_p, device=device)
             if score > threshold:
                 # list[list[int], list[list[int]]]
