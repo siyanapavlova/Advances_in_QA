@@ -78,6 +78,7 @@ def flatten_context(context, siyana_wants_a_oneliner=False):
         final = final.rstrip()
         return final
 
+
 class ConfigReader():
     """
     Basic container and management of parameter configurations.
@@ -250,6 +251,7 @@ class ConfigReader():
     def set(self, paramname, value):
         self.params.update({paramname:value})
 
+
 class Timer():
     """
     Simple wrapper for taking time. A Timer object starts taking time upon initialization.
@@ -297,6 +299,7 @@ class Timer():
         self.steps.append("total")
         self.times.update({"total": span})
         return span
+
 
 class HotPotDataHandler():
     """
@@ -351,7 +354,31 @@ class HotPotDataHandler():
                          ])
         return result
 
-    def select_and_dump_data_for_evaluation_during_training(self, ids, destination):
+    def select_and_dump_data_for_evaluation_during_training(self, para_selector, dev_data, destination, cfg):
+        id_to_list_index = {point['_id']: i for i, point in enumerate(self.data)}
+
+        eval_data = []
+        for point in dev_data:
+            context = para_selector.make_context(point, threshold=cfg("ps_threshold"),
+                                                        context_length=cfg("text_length"))
+            # get the datapoint from the original data with the same '_id' as the point we are looking at
+            original_point = self.data[id_to_list_index[point[0]]]
+            original_point['context'] = context
+
+            new_sup_facts = []
+            # for para in context:
+            #     if para[0] in original_point['supporting_facts']
+
+            sup_fact_titles = [title.lower() for title, _ in original_point['supporting_facts']]
+
+            for para in context:
+                if para[0] in sup_fact_titles:
+                    pass  # do stuff here
+
+            eval_data.append(original_point)
+
+        with open(destination, 'w') as f:
+            json.dump(eval_data)
 
 
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
