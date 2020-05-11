@@ -453,7 +453,7 @@ class ParagraphSelector():
 
             # do the actual prediction & decision
             encoded_p = torch.tensor([token_ids])
-            print(f"in ParagraphSelector.make_context: shape of encoded_p: {encoded_p.shape}") #CLEANUP
+            #print(f"in ParagraphSelector.make_context: shape of encoded_p: {encoded_p.shape}") #CLEANUP
             score = self.predict(encoded_p, device=device)
             if score > threshold:
                 # list[list[int], list[list[int]]]
@@ -470,6 +470,9 @@ class ParagraphSelector():
         cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
 
         for i, (header, para) in enumerate(context):
+
+            #TODO 2020-05-11 continue here: what about that warning? And why does it not pad/trim too much?
+            # what does the ParagraphSelector actually get as input?
 
             if len(header) >= cut_off_point:
                 trimmed_context.append([self.tokenizer.decode(header[:cut_off_point]), []])
