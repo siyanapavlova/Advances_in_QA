@@ -125,7 +125,7 @@ def train(net, train_data, dev_data, dev_data_filepath, dev_preds_filepath, mode
             # make a list[ list[str, list[str]] ] for each point in the batch
             contexts = [para_selector.make_context(point,
                                                    threshold=ps_threshold,
-                                                   context_length=text_length)
+                                                   context_length=text_length) #TODO add device and numerated arguments
                         for point in batch]
 
             graphs = [EntityGraph.EntityGraph(c,
