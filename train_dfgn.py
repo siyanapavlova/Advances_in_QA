@@ -308,6 +308,8 @@ def evaluate(net, dev_data,
     """
 
     """ PREPADE DATA FOR PREDICTION """
+    point_ids = [point[0] for point in dev_data] # needed to handle useless datapoints
+
     queries = [point[2] for point in dev_data]
 
     # make a list[ list[str, list[str]] ] for each point in the batch
@@ -327,6 +329,7 @@ def evaluate(net, dev_data,
     contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
     graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
 
+
     # required for prediction in the right format
     s_lens_batch = [utils.sentence_lengths(c, tokenizer) for c in contexts]
 
@@ -341,25 +344,34 @@ def evaluate(net, dev_data,
 
 
     """ MAKE LABELS IF NECESSARY"""
-    try: # check whether eval_data_filepath exists ....
-        f = open(eval_data_filepath, "r")
-        f.close()
-    except FileNotFoundError: # ... If not, make labeled data and write it to eval_data_filepath.
-        for (i, p), c in zip(enumerate(dev_data), contexts):
-            dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
-        dev_data = utils.make_eval_data(dev_data)
+    #try: # check whether eval_data_filepath exists .... #CLEANUP?
+    #    f = open(eval_data_filepath, "r")
+    #    f.close()
+    #except FileNotFoundError: # ... If not, make labeled data and write it to eval_data_filepath.
+    for (i, p), c in zip(enumerate(dev_data), contexts):
+        dev_data[i][3] = c # shorten the paragraphs in raw_point in order to exclude PS errors
+    eval_data = utils.make_eval_data(dev_data)
 
-        with open(eval_data_filepath, 'w') as f:
-            json.dump(dev_data, f)
+    with open(eval_data_filepath, 'w') as f:
+        json.dump(eval_data, f)
 
         #TODO pass dev_data_filepath through the whole script
 
     """ FORWARD PASSES """
-    answers = {} # {question_id: str} (either "yes", "no" or a string containing the answer)
-    sp = {} # {question_id: list[list[paragraph_title, sent_num]]}
+    answers = {}  # {question_id: str} (either "yes", "no" or a string containing the answer)
+    sp = {}  # {question_id: list[list[paragraph_title, sent_num]]} (supporting sentences)
+
+    # return useless datapoints unanswered
+    for i in useless_datapoint_inds:
+        answers[point_ids[i]] = "noanswer"
+        sp[point_ids[i]] = []
 
     for i, (query, context, graph, s_lens) in enumerate(zip(q_ids_list, c_ids_list, graphs, s_lens_batch)):
         answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, s_lens, fb_passes=fb_passes)
+
+        print(f"in train_dfgn.evaluate(): dev_data[i]: {dev_data[i]}\n")  # CLEANUP
+        print(f"in train_dfgn.evaluate(): answer: {answer}") #CLEANUP
+        print(f"in train_dfgn.evaluate(): sup_fact_pairs: {sup_fact_pairs}\n")  # CLEANUP
 
         answers[dev_data[i][0]] = answer  # {question_id: str}
         sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
@@ -445,6 +457,9 @@ if __name__ == '__main__':
                                                         test_size=cfg('percent_for_eval_during_training'),
                                                         random_state=cfg('shuffle_seed'),
                                                         shuffle=True)
+
+        #print(f"in train_dfgn.main(): len(dev_data_raw): {len(dev_data_raw)}") #CLEANUP
+        #print(dev_data_raw)
         #train_data = ParagraphSelector.make_training_data(train_data_raw, text_length=cfg("text_length")) #CLEANUP
         #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
 
@@ -453,6 +468,8 @@ if __name__ == '__main__':
 
         with open(cfg("pickled_dev_data"), "wb") as f:
             pickle.dump(dev_data_raw, f)
+
+
 
     # group training data into batches
     bs = cfg("batch_size")
@@ -466,15 +483,21 @@ if __name__ == '__main__':
 
     # ========== DFGN START
 
+    #TODO initialize Paragrah Selector and later pass it to train()
+
+    #TODO use the PS to make eval data (and dump it) with that datahandler long-ass named function
+
+    #TODO the PS-processed dev data doesn't have to be passed (heck, it doesn't even have to be in memory!)
+
     dfgn = DFGN(text_length=cfg("text_length"),
                 emb_size=cfg("emb_size"),
                 fb_dropout=cfg("fb_dropout"),
                 predictor_dropout=cfg("predictor_dropout"))
 
-    losses, dev_scores, train_times = train(dfgn,
+    losses, dev_scores, train_times = train(dfgn, #TODO watch out with the parameter sorting!
                           train_data_raw, # in batches
-                          dev_data_raw,
-                          eval_data_dump_filepath, # for dumping processed dev_data_raw
+                          dev_data_raw, #TODO probably not needed anymore!
+                          eval_data_dump_filepath, # for reading processed dev_data_raw
                           eval_preds_dump_filepath, # for dumping predictions during evaluation
                           model_filepath, # where the dfgn model will be saved
                           ps_path=cfg("ps_model_abs_path"),

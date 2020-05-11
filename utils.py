@@ -351,6 +351,9 @@ class HotPotDataHandler():
                          ])
         return result
 
+    def select_and_dump_data_for_evaluation_during_training(self, ids, destination):
+
+
 def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     """
     Prepare labeled data for the Predictor, i.e. per-token labels for
@@ -437,6 +440,7 @@ def sentence_lengths(context, tokenizer):
 def make_eval_data(raw_points):
     """
     TODO: docstring
+    format the data point to the form of the official evaluation script
     :param raw_points:
     :return:
     """
@@ -448,12 +452,17 @@ def make_eval_data(raw_points):
         # map question IDs to supporting facts
         eval_data["sp"][point[0]] = []
 
-        for para in point[3]: # point
+        # lowercase paragraph titles both in the context and in the supporting facts
+        paras = [[p[0].lower(),p[1]] for p in point[3]]
+        sup_facts = {title.lower():s_num for title,s_num in point[1].items()}
+        #for para in point[3]: # point #CLEANUP?
+        for para in paras:
             # if the paragraph has supporting facts;
-            if point[1].get(para[0]): # point[1] is {str:list[int]}; para[0] is the paragraph title
-                for sent_idx in point[1][para[0]]: # for each sentence that's a supporting fact
+            #if point[1].get(para[0]): # point[1] is {str:list[int]}; para[0] is the paragraph title #CLEANUP?
+            if sup_facts.get(para[0]): # para[0] is the paragraph title
+                for sent_idx in sup_facts[para[0]]: # for each sentence that's a supporting fact
                     # if the sentence with index sent_idx is in the paragraph (has not been cropped out by PS)
-                    if sent_idx < len(para[1]): # para[1] is a list of sentences in the paragraph
+                    if sent_idx < len(para[1]):
                         eval_data["sp"][point[0]].append([para[0], sent_idx])
 
     return eval_data

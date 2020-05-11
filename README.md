@@ -43,6 +43,7 @@ Training a DFGN means that the Encoder, FusionBlock, and Predictor modules are t
 ```
 python3 train_dfgn.py config/train_dfgn.cfg my_dfgn
 ```
+[TODO update this section?]
 Have a look at the config file used in this example in oder to get an idea of the required (and optional) parameters for training. If you run into issues with your GPU, try setting device-related parameters to "False" or to 'cpu'. The batch size might have to be very small. 
 
 
@@ -57,8 +58,11 @@ The predictions made during evaluation are also logged in a directory named afte
 
 
 ### Test the DFGN with `eval_dfgn.py` 
-[TODO] 
+[TODO write this section] 
 
+
+### Pre-trained models [TODO make sure that this is up-to-date]
+You can download pre-trained models for the ParagraphSelector and the subsequent DFGN [from this Google Drive](https://drive.google.com/drive/folders/1FZzxpKQGhDzaDjACcPTna117Ope-RKdE?usp=sharing).
 
 
 ### Configuration Files
