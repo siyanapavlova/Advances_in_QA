@@ -17,7 +17,7 @@ class FusionBlock(nn.Module):
 	class defined in utils), and puts them together in its forward function.
 	"""
 
-	def __init__(self, emb_size, dropout=0.0):
+	def __init__(self, emb_size, device='cpu', dropout=0.0):
 		"""
 		Initialization function for the FusionBlock class
 		#TODO update docstring
@@ -27,6 +27,7 @@ class FusionBlock(nn.Module):
 		"""
 		super(FusionBlock, self).__init__()
 
+		self.device = device
 		self.d2 = emb_size
 		self.droot = sqrt(self.d2) 						  # for formula 2
 		self.V = nn.Parameter(torch.Tensor(self.d2, 2 * self.d2))  # for formula 2
@@ -176,7 +177,7 @@ class FusionBlock(nn.Module):
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
 											      for j, rel_type in graph.graph[i]["links"]]
 												  if graph.graph[i]["links"]
-												  else [torch.zeros((self.d2, 1), device=alphas.device)]
+												  else [torch.zeros((self.d2, 1), device=self.device)]
 												  ))
 			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
 			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP

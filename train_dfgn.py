@@ -19,12 +19,12 @@ import utils
 
 class DFGN(torch.nn.Module): # TODO extract this to a separate module
     #TODO? implement loading of a previously trained DFGN model (for final evaluation!) ?
-    def __init__(self, text_length, emb_size,
+    def __init__(self, text_length, emb_size, device='cpu',
                  fb_dropout=0.5, predictor_dropout=0.3):
         #TODO docstring
-        super(DFGN, self).__init__()
+        super(DFGN, self).__init__() #TODO pass the device to the Encoder and the Predictor as well?
         self.encoder = Encoder.Encoder(text_length=text_length)
-        self.fusionblock = FusionBlock.FusionBlock(emb_size, dropout=fb_dropout) #TODO sort out init
+        self.fusionblock = FusionBlock.FusionBlock(emb_size, device=device, dropout=fb_dropout) #TODO sort out init
         self.predictor = Predictor.Predictor(text_length, emb_size, dropout=predictor_dropout) #TODO sort out init
 
     def from_file(self, filepath):
@@ -58,7 +58,7 @@ def train(net, train_data, #dev_data,
           dev_data_filepath, dev_preds_filepath, model_save_path,
           para_selector, #TODO sort these nicely
           ps_threshold=0.1,
-          ner_with_gpu=False, try_training_on_gpu=True,
+          ner_with_gpu=False, training_device='cpu',
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=3, batch_size=1, learning_rate=1e-4,
@@ -89,7 +89,6 @@ def train(net, train_data, #dev_data,
 
     tagger_device = 'cuda' if ner_with_gpu else 'cpu'
     flair.device = torch.device(tagger_device)
-    print("flair.device:", flair.device) #CLEANUP
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
@@ -101,9 +100,8 @@ def train(net, train_data, #dev_data,
     # Set the network into train mode
     net.train()
 
-    cuda_is_available = torch.cuda.is_available() if try_training_on_gpu else False
+    cuda_is_available = torch.cuda.is_available() if training_device else False
     device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
-    print("device:",device) #CLEANUP
     # put the net on the GPU if possible
     if cuda_is_available:
         net = net.to(device)
@@ -481,8 +479,11 @@ if __name__ == '__main__':
                       eval_data_dump_filepath,
                       cfg)
 
+    device = torch.device('cuda') if cfg("try_training_on_gpu") else 'cpu'
+
     dfgn = DFGN(text_length=cfg("text_length"),
                 emb_size=cfg("emb_size"),
+                device=device,
                 fb_dropout=cfg("fb_dropout"),
                 predictor_dropout=cfg("predictor_dropout"))
 
@@ -495,7 +496,7 @@ if __name__ == '__main__':
                           para_selector,
                           ps_threshold=cfg("ps_threshold"),
                           ner_with_gpu=cfg("use_gpu_for_ner"),
-                          try_training_on_gpu=cfg("try_training_on_gpu"),
+                          training_device=device,
                           fb_passes=cfg("fb_passes"),
                           coefs=(cfg("lambda_s"), cfg("lambda_t")),
                           text_length=cfg("text_length"),
