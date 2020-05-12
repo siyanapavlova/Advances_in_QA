@@ -166,8 +166,11 @@ class FusionBlock(nn.Module):
 
 		""" compute total information received per node """
 		ents_with_new_information = []
+		print(f"\nin FusionBlock.graph_attention(): THE GRAPH:") #CLEANUP
+		print(graph) #CLEANUP
 
 		for i in range(N):
+			print(graph.graph[i]['mention']) #CLEANUP
 			# non-connected nodes have an information flow of 0.
 			# j(scalar * (d2, 1)) --> sum --> (d2, 1) --> loop --> N*(d2, 1)
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]

@@ -430,8 +430,8 @@ class ParagraphSelector():
                                                  max_length=512) # to avoid warnings
         """ SELECT PARAGRAPHS """
 
-        print(f"\nin ParagraphSelector.make_context():") #CLEANUP
-        print(f"id: {datapoint[0]}") #CLEANUP
+        #print(f"\nin ParagraphSelector.make_context():") #CLEANUP
+        #print(f"id: {datapoint[0]}") #CLEANUP
 
         for i, p in enumerate(datapoint[3]):
             header_token_ids = self.tokenizer.encode(p[0],
