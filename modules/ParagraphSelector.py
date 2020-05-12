@@ -498,8 +498,9 @@ class ParagraphSelector():
                     pos += len(sentence) # go to the next sentence
 
         print(f"in ParagraphSelector.make_context() (END):") #CLEANUP
-        print(f"trimmed context:}") #CLEANUP
-        pprint(trimmed_context,"\n") #CLEANUP
+        print(f"trimmed context:") #CLEANUP
+        pprint(f"{trimmed_context}") #CLEANUP
+        print("\n") #CLEANUP
         return (trimmed_context, para_indices) if numerated else trimmed_context
 
     def save(self, savepath):
