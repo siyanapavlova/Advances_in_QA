@@ -230,7 +230,7 @@ def train(net, train_data, #dev_data,
                                    verbose=verbose_evaluation)
                 score = metrics["joint_f1"]
                 dev_scores.append(metrics) # appends the whole dict of metrics
-                if score > best_score:
+                if score >= best_score:
                     print(f"Better eval found with accuracy {round(score, 3)} (+{round(score - best_score, 3)})")
                     best_score = score
 
@@ -245,12 +245,27 @@ def train(net, train_data, #dev_data,
             optimizer.step()
         timer(f"training_epoch_{epoch}")
 
+    #========= END OF TRAINING =============#
+    metrics = evaluate(net,  # TODO make this prettier
+                       tokenizer, ner_tagger,
+                       training_device, dev_data_filepath, dev_preds_filepath,
+                       fb_passes=fb_passes,
+                       text_length=text_length,
+                       verbose=verbose_evaluation)
+    score = metrics["joint_f1"]
+    dev_scores.append(metrics)  # appends the whole dict of metrics
+    if score >= best_score:
+        torch.save(net,
+                   model_save_path)
+
     if not a_model_was_saved_at_some_point:  # make sure that there is a model file
         print(f"saving model to {model_save_path}...")
-        torch.save(net, model_save_path) #TODO make sure that this works (maybe have a method that saves all 3 parts individually?)
+        torch.save(net, model_save_path)
 
     losses_with_batchsizes = [(b, t[0], t[1], t[2], t[3], t[4]) for b,t in zip(real_batch_sizes, losses)]
     return (losses_with_batchsizes, dev_scores, timer) if timed else (losses_with_batchsizes, dev_scores)
+
+
 
 def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1):
     """
