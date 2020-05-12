@@ -160,7 +160,7 @@ def train(net, train_data, #dev_data,
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)] # list[(support, start, end, type)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
-            print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
+            #print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
 
             q_ids_list = [t.to(training_device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(training_device) if t is not None else None for t in c_ids_list]
