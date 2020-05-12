@@ -81,7 +81,9 @@ def train(net, train_data, #dev_data,
     """
     timer = utils.Timer()
 
-    # para_selector = ParagraphSelector.ParagraphSelector(ps_path) #CLEANUP as this is already done before
+    #TODO DELETE THIS
+    torch.cuda.set_device(1) #CLEANUP
+    #TODO THIS IS ONLY FOR DEBUGGING
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
