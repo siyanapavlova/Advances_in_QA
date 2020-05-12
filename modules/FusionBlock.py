@@ -167,11 +167,11 @@ class FusionBlock(nn.Module):
 
 		""" compute total information received per node """
 		ents_with_new_information = []
-		print(f"\nin FusionBlock.graph_attention(): THE GRAPH:") #CLEANUP
-		print(graph) #CLEANUP
+		#print(f"\nin FusionBlock.graph_attention(): THE GRAPH:") #CLEANUP
+		#print(graph) #CLEANUP
 
 		for i in range(N):
-			print(graph.graph[i]['mention']) #CLEANUP
+			#print(graph.graph[i]['mention']) #CLEANUP
 			# non-connected nodes have an information flow of 0.
 			# j(scalar * (d2, 1)) --> sum --> (d2, 1) --> loop --> N*(d2, 1)
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
@@ -182,7 +182,7 @@ class FusionBlock(nn.Module):
 			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
 			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
 			#print(f"   new length of ents_with_new_information: {len(ents_with_new_information)}") #CLEANUP
-			print(f"   device of ent_with_new_information[-1]: {ents_with_new_information[-1].device}") #CLEANUP
+			#print(f"   device of ent_with_new_information[-1]: {ents_with_new_information[-1].device}") #CLEANUP
 
 		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
 		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8

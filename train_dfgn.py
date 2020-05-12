@@ -62,7 +62,7 @@ def train(net, train_data, #dev_data,
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=3, batch_size=1, learning_rate=1e-4,
-          eval_interval=None, timed=False):
+          eval_interval=None, verbose_evaluation=False, timed=False):
     #TODO docstring
     """
 
@@ -202,7 +202,7 @@ def train(net, train_data, #dev_data,
             types =  torch.stack(types)  # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
-            weights = torch.ones(2) #TODO maybe extract this to a tiny function?
+            weights = torch.ones(2, device=training_device) #TODO maybe extract this to a tiny function?
             sup_label_batch = sup_labels.view(-1)
             weights[0] = sum(sup_label_batch)/float(sup_label_batch.shape[0])
             weights[1] -= weights[0] # assign the opposite weight
@@ -236,7 +236,8 @@ def train(net, train_data, #dev_data,
                                    tokenizer, ner_tagger,
                                    device, dev_data_filepath, dev_preds_filepath,
                                    fb_passes = fb_passes,
-                                   text_length = text_length)
+                                   text_length = text_length,
+                                   verbose=verbose_evaluation)
                 score = metrics["joint_f1"]
                 dev_scores.append(metrics) # appends the whole dict of metrics
                 if score > best_score:
@@ -310,7 +311,7 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
 def evaluate(net,
              tokenizer, ner_tagger,
              device, eval_data_filepath, eval_preds_filepath,
-             fb_passes = 1, text_length = 250):
+             fb_passes = 1, text_length = 250, verbose=False):
     """
     #TODO docstring
     :param net:
@@ -361,10 +362,16 @@ def evaluate(net,
         sp[point_ids[i]] = []
 
     for i, (query, context, graph, s_lens) in enumerate(zip(q_ids_list, c_ids_list, graphs, s_lens_batch)):
-        answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer, s_lens, fb_passes=fb_passes)
+
+        if verbose: print(queries[i])
+
+        answer, sup_fact_pairs = predict(net, query, context, graph, tokenizer,
+                                         s_lens, fb_passes=fb_passes) #TODO sort these parameters
 
         answers[dev_data[i][0]] = answer  # {question_id: str}
         sp[dev_data[i][0]] = sup_fact_pairs # {question_id: list[list[paragraph_title, sent_num]]}
+
+        if verbose: print(answer)
 
     with open(eval_preds_filepath, 'w') as f:
         json.dump( {"answer":answers, "sp":sp} , f)
@@ -504,6 +511,7 @@ if __name__ == '__main__':
                           batch_size=cfg("batch_size"),
                           learning_rate=cfg("learning_rate"),
                           eval_interval=cfg("eval_interval"),
+                          verbose_evaluation=cfg("verbose_evaluation"),
                           timed=True)
 
     take_time("training")
