@@ -178,7 +178,8 @@ class FusionBlock(nn.Module):
 			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
 			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
 			#print(f"   new length of ents_with_new_information: {len(ents_with_new_information)}") #CLEANUP
-			#print(f"   shape of this element: {ents_with_new_information[-1].shape}") #CLEANUP
+			print(f"   device of ent_with_new_information[-1]: {ents_with_new_information[-1].device}") #CLEANUP
+
 		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
 		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8
 

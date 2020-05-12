@@ -89,6 +89,7 @@ def train(net, train_data, #dev_data,
 
     tagger_device = 'cuda' if ner_with_gpu else 'cpu'
     flair.device = torch.device(tagger_device)
+    print("flair.device:", flair.device) #CLEANUP
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
@@ -102,6 +103,7 @@ def train(net, train_data, #dev_data,
 
     cuda_is_available = torch.cuda.is_available() if try_training_on_gpu else False
     device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
+    print("device:",device) #CLEANUP
     # put the net on the GPU if possible
     if cuda_is_available:
         net = net.to(device)
