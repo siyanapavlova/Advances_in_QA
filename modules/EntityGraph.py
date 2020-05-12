@@ -280,28 +280,28 @@ class EntityGraph():
             entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
             ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
             assert type(entity[1]) is list
-            #print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+            print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
 
             all_chars = ""
             for i, t in enumerate(self.tokens):
-                #print(f"#===== new token (i, t): {i} {t}") #CLEANUP
+                print(f"#===== new token (i, t): {i} {t}") #CLEANUP
 
                 all_chars += t.strip("#")
-                #print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
+                print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
 
                 if all_chars.endswith(ent_chars): # ent_chars = "henrileconte" # we found something!
-                    #print(f"   found an entity: {ent_chars}")  # CLEANUP
+                    print(f"   found an entity: {ent_chars}")  # CLEANUP
                     tok_num = 0
                     query = ""
                     while query != ent_chars: # ent_chars = "henrileconte"    query = "henrileconte"
-                        #print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
+                        print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
                         query = self.tokens[i-tok_num].strip("#") + query # grow a string backwards
                         tok_num += 1 # count up the number of tokens needed to build ent_chars
-                        #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
+                        print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
 
                     if entity[0] not in mapping: # new entry with the ID as key
                         mapping[entity[0]] = [i-x for x in range(tok_num)]
-                        #print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
+                        print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
                     else:
                         mapping[entity[0]].extend([i-x for x in range(tok_num)])
 
@@ -310,7 +310,7 @@ class EntityGraph():
                         entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
                         ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
                         assert type(entity[1]) is list
-                        #print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+                        print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
                     else:
                         break
 
@@ -319,16 +319,16 @@ class EntityGraph():
 
             mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
 
-            #for id, toks in mapping.items():
-                #print(id, [self.tokens[t] for t in toks]) #CLEANUP
+            for id, toks in mapping.items():
+                print(id, [self.tokens[t] for t in toks]) #CLEANUP
         else:
             pass # no entity in the stack, so we have an empty mapping
 
 
         # add the mapping of entity to token numbers to the graph's nodes
         if add_token_mapping_to_graph:
-            #print("\nself.graph.keys() =",self.graph.keys()) #CLEANUP
-            #print("mapping.keys() =", mapping.keys(),"\n") #CLEANUP
+            print("\nself.graph.keys() =",self.graph.keys()) #CLEANUP
+            print("mapping.keys() =", mapping.keys(),"\n") #CLEANUP
             for id in self.graph:
                 self.graph[id].update({"token_ids":mapping[id]})
 

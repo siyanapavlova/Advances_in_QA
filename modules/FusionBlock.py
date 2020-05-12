@@ -187,7 +187,7 @@ class FusionBlock(nn.Module):
 		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
 		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8
 
-		return E_t.squeeze(dim=-1) # (N, d2) #TODO avoid torch.Tensor()
+		return E_t.squeeze(dim=-1) # (N, d2)
 
 	def graph2doc(self, entity_embs, bin_M, context_emb):
 		"""
