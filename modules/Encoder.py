@@ -63,31 +63,6 @@ class Encoder(torch.nn.Module):
         #TODO rename variables to avoid confusion!!!
 
         #TODO maybe change this in order to avoid unnecessary computing?
-        """
-        if type(q_token_ids) == torch.Tensor:
-            q_token_ids = q_token_ids.tolist()
-        if type(c_token_ids) == torch.Tensor:
-            c_token_ids = c_token_ids.tolist()
-
-        len_query = len(q_token_ids)
-        len_context = len(c_token_ids) # obtained from ParagraphSelector, potentially slightly longer than self.textlength
-
-        # we need to trim, otherwise (1) Bert will explode or (2) our context is longer than specified
-        if len_query+len_context > MAX_LEN or len_query+len_context > self.text_length:
-            cut_point = min(MAX_LEN - len_query, self.text_length)
-            if len_context >= len_query: # trim whatever 'context' is
-                c_token_ids = c_token_ids[:cut_point]#:self.text_length - len_query] #CLEANUP?
-                len_context = len(c_token_ids)
-            else: # trim whatever 'query' is
-                q_token_ids = q_token_ids[:cut_point]
-                len_query = len(q_token_ids)
-
-        all_token_ids = q_token_ids + c_token_ids
-        len_all = len(all_token_ids)
-
-        if len_query+len_context < self.text_length: # we need to pad
-            all_token_ids += [self.pad_token_id for _ in range(self.text_length - len_all)]
-        """ #CLEANUP
 
         len_query = q_token_ids.shape[0]
         len_context = c_token_ids.shape[0]
@@ -179,6 +154,12 @@ class Encoder(torch.nn.Module):
         context_input_ids = self.tokenizer.encode(flatten_context(context),
                                                      add_special_tokens=False,
                                                      max_length=self.text_length)
+
+        # Add padding if there are fewer than text_length tokens,
+        if len(context_input_ids) < self.text_length:
+            context_input_ids += [self.tokenizer.pad_token_id
+                                  for _ in
+                                  range(self.text_length - len(context_input_ids))]
 
         return query_input_ids, context_input_ids
 

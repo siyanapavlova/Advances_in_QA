@@ -72,7 +72,14 @@ class EntityGraph():
         #print(f"in EntityGraph.init(): context: {self.context}") #CLEANUP
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        self.tokens = self.tokenizer.tokenize(self.flatten_context())[:context_length] # trim to exact length
+        self.tokens = self.tokenizer.tokenize(self.flatten_context())
+        # Add padding if there are fewer than text_length tokens,
+        if len(self.tokens) < context_length:
+            self.tokens += [self.tokenizer.pad_token
+                                  for _ in
+                                  range(context_length - len(self.tokens))]
+        else: # trim to exact length
+            self.tokens = self.tokens[:context_length]
 
         self.graph = {}
         self.discarded_nodes = {}

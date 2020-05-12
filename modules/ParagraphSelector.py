@@ -462,6 +462,7 @@ class ParagraphSelector():
             if score > threshold:
                 # list[list[int], list[list[int]]]
                 # no [CLS] or [SEP] here
+                # WATCH OUT! this doesn't necessarily have text_length! (context will be padded in the Encoder)
                 context.append([header_token_ids, sentence_token_ids])
                 para_indices.append(i)
 
@@ -473,6 +474,9 @@ class ParagraphSelector():
         trimmed_context = [] # new data structure because we prioritise computing time over memory usage
         cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
 
+        #print(f"in ParagraphSelector.make_context() before trimming:")  # CLEANUP
+        #pprint(context) #CLEANUP
+        #print("\n") #CLEANUP
         for i, (header, para) in enumerate(context):
 
             #TODO 2020-05-11 continue here: what about that warning? And why does it not pad/trim too much?
@@ -489,18 +493,18 @@ class ParagraphSelector():
                 if pos + len(sentence) > cut_off_point: # we need to trim
                     s = sentence[:cut_off_point - pos]
                     s = self.tokenizer.decode(s) # re-convert token IDs to strings
-                    #if len(s) != 0: #CLEANUP?
-                    trimmed_context[i][1].append(s)
+                    if len(s) != 0: # to soothe the Flair tagger's "ACHTUNG" statement
+                        trimmed_context[i][1].append(s)
                     break # don't continue to loop over further sentences of this paragraph
                 else:
                     s = self.tokenizer.decode(sentence)
                     trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
                     pos += len(sentence) # go to the next sentence
 
-        print(f"in ParagraphSelector.make_context() (END):") #CLEANUP
-        print(f"trimmed context:") #CLEANUP
-        pprint(f"{trimmed_context}") #CLEANUP
-        print("\n") #CLEANUP
+        #print(f"in ParagraphSelector.make_context() (END):") #CLEANUP
+        #print(f"trimmed context:") #CLEANUP
+        #pprint(f"{trimmed_context}") #CLEANUP
+        #print("\n") #CLEANUP
         return (trimmed_context, para_indices) if numerated else trimmed_context
 
     def save(self, savepath):

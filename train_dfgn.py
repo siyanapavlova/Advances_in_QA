@@ -212,7 +212,6 @@ def train(net, train_data, #dev_data,
 
             # use .view(-1,...) to put points together (this is like summing the points' losses)
             sup_loss =   sup_criterion(sups.view(-1,2), sup_label_batch) # (batch*M, 2), (batch*M)
-
             start_loss = sum([criterion(starts[i], start_labels[i]) for i in range(start_labels.shape[0])])  # batch * ( (1, M, 1), (1) )
             end_loss   = sum([criterion(ends[i], end_labels[i]) for i in range(end_labels.shape[0])])        # batch * ( (1, M, 1), (1) )
             type_loss  =  criterion(types.view(-1,3),  type_labels.view(-1))    # (batch, 1, 3), (batch, 1)
