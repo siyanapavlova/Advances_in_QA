@@ -71,7 +71,7 @@ class EntityGraph():
 
         #print(f"in EntityGraph.init(): context: {self.context}") #CLEANUP
 
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', unk_token='[unk]')
         self.tokens = self.tokenizer.tokenize(self.flatten_context())
         # Add padding if there are fewer than text_length tokens,
         if len(self.tokens) < context_length:
@@ -292,14 +292,14 @@ class EntityGraph():
             for i, t in enumerate(self.tokens):
                 #print(f"#===== new token (i, t): {i} {t}") #CLEANUP
 
-                all_chars += t.strip("#").lower() # this sets [UNK] tokens to [unk]
+                all_chars += t.strip("#")
                 #print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
 
-                if all_chars.endswith(ent_chars): # ent_chars = "henrileconte" # we found something!
+                if all_chars.endswith(ent_chars):
                     #print(f"   found an entity: {ent_chars}")  # CLEANUP
                     tok_num = 0
                     query = ""
-                    while query != ent_chars: # ent_chars = "henrileconte"    query = "henrileconte"
+                    while query != ent_chars:
                         #print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
                         query = self.tokens[i-tok_num].strip("#") + query # grow a string backwards
                         tok_num += 1 # count up the number of tokens needed to build ent_chars
