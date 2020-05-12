@@ -431,7 +431,7 @@ class ParagraphSelector():
         """ SELECT PARAGRAPHS """
 
         print(f"\nin ParagraphSelector.make_context():") #CLEANUP
-        print(f"id: {datapoint[0]}\ntext:\n{}")
+        print(f"id: {datapoint[0]}") #CLEANUP
 
         for i, p in enumerate(datapoint[3]):
             header_token_ids = self.tokenizer.encode(p[0],
@@ -497,6 +497,9 @@ class ParagraphSelector():
                     trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
                     pos += len(sentence) # go to the next sentence
 
+        print(f"in ParagraphSelector.make_context() (END):") #CLEANUP
+        print(f"trimmed context:}") #CLEANUP
+        pprint(trimmed_context,"\n") #CLEANUP
         return (trimmed_context, para_indices) if numerated else trimmed_context
 
     def save(self, savepath):
