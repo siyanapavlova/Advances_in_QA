@@ -429,6 +429,10 @@ class ParagraphSelector():
         query_token_ids = self.tokenizer.encode(datapoint[2],
                                                  max_length=512) # to avoid warnings
         """ SELECT PARAGRAPHS """
+
+        print(f"\nin ParagraphSelector.make_context():") #CLEANUP
+        print(f"id: {datapoint[0]}\ntext:\n{}")
+
         for i, p in enumerate(datapoint[3]):
             header_token_ids = self.tokenizer.encode(p[0],
                                                    max_length=512, # to avoid warnings
@@ -485,8 +489,8 @@ class ParagraphSelector():
                 if pos + len(sentence) > cut_off_point: # we need to trim
                     s = sentence[:cut_off_point - pos]
                     s = self.tokenizer.decode(s) # re-convert token IDs to strings
-                    if len(s) != 0:
-                        trimmed_context[i][1].append(s)
+                    #if len(s) != 0: #CLEANUP?
+                    trimmed_context[i][1].append(s)
                     break # don't continue to loop over further sentences of this paragraph
                 else:
                     s = self.tokenizer.decode(sentence)

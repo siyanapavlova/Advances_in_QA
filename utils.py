@@ -418,10 +418,10 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     :return sentence_lengths: #TODO describe
     """
     M = len(graph.tokens)
-    print(f"making labels for point {raw_point[0]}")
-    print(f"query of that point: {raw_point[2]}")
-    print(f"length of graph's tokens (=M): {M}")
-    print(f"raw_point context:\n{raw_point[3]}\n\n")
+    #print(f"making labels for point {raw_point[0]}") #CLEANUP
+    #print(f"query of that point: {raw_point[2]}") #CLEANUP
+    #print(f"length of graph's tokens (=M): {M}") #CLEANUP
+    #print(f"raw_point context:\n{raw_point[3]}\n\n") #CLEANUP
 
     sup_labels = torch.zeros(M, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
     start_label = torch.zeros(1, dtype=torch.long)
