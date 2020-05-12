@@ -151,10 +151,12 @@ class EntityGraph():
                                               "links":[], # relations
                                               "mention":e['text'] # name of the node
                                              }
+                        print(f"in EntityGraph._find_nodes(): address & mention: {self.graph[ent_id]['address']} -- {self.graph[ent_id]['mention']}") #CLEANUP
                         ent_id += 1
 
         elif type(tag_with) == SequenceTagger:
             tagger = tag_with
+            print(f"in EntityGraph._find_nodes(): context:\n{self.context}") #CLEANUP
             for para_id, paragraph in enumerate(self.context):  # between 0 and 10 paragraphs
                 # merge header and sentences to one list and convert to Sentence object
                 sentences = [Sentence(s) for s in [paragraph[0]] + paragraph[1]]
@@ -327,8 +329,8 @@ class EntityGraph():
 
         # add the mapping of entity to token numbers to the graph's nodes
         if add_token_mapping_to_graph:
-            print("\nself.graph.keys() =",self.graph.keys()) #CLEANUP
-            print("mapping.keys() =", mapping.keys(),"\n") #CLEANUP
+            print("\nself.graph.keys() =", self.graph.keys()) #CLEANUP
+            print("   mapping.keys() =", mapping.keys(),"\n") #CLEANUP
             for id in self.graph:
                 self.graph[id].update({"token_ids":mapping[id]})
 
