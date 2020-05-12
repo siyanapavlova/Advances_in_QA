@@ -176,7 +176,7 @@ class FusionBlock(nn.Module):
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
 											      for j, rel_type in graph.graph[i]["links"]]
 												  if graph.graph[i]["links"]
-												  else [torch.zeros((self.d2, 1))]
+												  else [torch.zeros((self.d2, 1), device=alphas.device)]
 												  ))
 			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
 			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
