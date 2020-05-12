@@ -162,15 +162,15 @@ def train(net, train_data, #dev_data,
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
             print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
 
-            q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
-            c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
+            q_ids_list = [t.to(training_device) if t is not None else None for t in q_ids_list]
+            c_ids_list = [t.to(training_device) if t is not None else None for t in c_ids_list]
             for i, g in enumerate(graphs):
-                graphs[i].M = g.M.to(device) # work with enumerate to actually mutate the graph objects
+                graphs[i].M = g.M.to(training_device) # work with enumerate to actually mutate the graph objects
 
-            sup_labels = torch.stack(sup_labels).to(device)      # (batch, M)
-            start_labels = torch.stack(start_labels).to(device)  # (batch, 1)
-            end_labels = torch.stack(end_labels).to(device)      # (batch, 1)
-            type_labels = torch.stack(type_labels).to(device)    # (batch)
+            sup_labels = torch.stack(sup_labels).to(training_device)      # (batch, M)
+            start_labels = torch.stack(start_labels).to(training_device)  # (batch, 1)
+            end_labels = torch.stack(end_labels).to(training_device)      # (batch, 1)
+            type_labels = torch.stack(type_labels).to(training_device)    # (batch)
 
 
             """ FORWARD PASSES """
@@ -224,7 +224,7 @@ def train(net, train_data, #dev_data,
                 # this calls the official evaluation script (altered to return metrics)
                 metrics = evaluate(net, #TODO make this prettier
                                    tokenizer, ner_tagger,
-                                   device, dev_data_filepath, dev_preds_filepath,
+                                   training_device, dev_data_filepath, dev_preds_filepath,
                                    fb_passes = fb_passes,
                                    text_length = text_length,
                                    verbose=verbose_evaluation)
