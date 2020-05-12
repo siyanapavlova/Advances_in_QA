@@ -472,7 +472,7 @@ class ParagraphSelector():
         # and decode so that strings are returned
         #TODO maybe extract this to a function
         trimmed_context = [] # new data structure because we prioritise computing time over memory usage
-        cut_off_point = 0 if not context else math.ceil(context_length/len(context)) # roughly cut to an even length
+        cut_off_point = 0 if not context else math.floor(context_length/len(context)) # roughly cut to an even length
 
         #print(f"in ParagraphSelector.make_context() before trimming:")  # CLEANUP
         #pprint(context) #CLEANUP
