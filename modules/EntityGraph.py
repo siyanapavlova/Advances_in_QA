@@ -283,7 +283,7 @@ class EntityGraph():
             ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
             assert type(entity[1]) is list
 
-            pprint("CONTEXT:\n",self.context)  # CLEANUP
+            print("CONTEXT:\n",self.context)  # CLEANUP
             print("GRAPH:\n",self)  # CLEANUP
 
             print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
