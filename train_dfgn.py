@@ -463,12 +463,17 @@ if __name__ == '__main__':
         #print(dev_data_raw)
         #train_data = ParagraphSelector.make_training_data(train_data_raw, text_length=cfg("text_length")) #CLEANUP
         #train_data = shuffle(train_data, random_state=cfg('data_shuffle_seed')) #CLEANUP?
+        try:
+            with open(cfg("pickled_train_data"), "wb") as f:
+                pickle.dump(train_data_raw, f)
+        except:
+            print("tried to pickle the training data for later re-use, but no valid path was given.")
 
-        with open(cfg("pickled_train_data"), "wb") as f:
-            pickle.dump(train_data_raw, f)
-
-        with open(cfg("pickled_dev_data"), "wb") as f:
-            pickle.dump(dev_data_raw, f)
+        try:
+            with open(cfg("pickled_dev_data"), "wb") as f:
+                pickle.dump(dev_data_raw, f)
+        except:
+            print("tried to pickle the development data for later re-use, but no valid path was given.")
 
 
 
