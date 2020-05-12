@@ -17,7 +17,7 @@ class FusionBlock(nn.Module):
 	class defined in utils), and puts them together in its forward function.
 	"""
 
-	def __init__(self, emb_size, device='cpu', dropout=0.0):
+	def __init__(self, emb_size, device=torch.device('cpu'), dropout=0.0):
 		"""
 		Initialization function for the FusionBlock class
 		#TODO update docstring

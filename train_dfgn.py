@@ -19,7 +19,7 @@ import utils
 
 class DFGN(torch.nn.Module): # TODO extract this to a separate module
     #TODO? implement loading of a previously trained DFGN model (for final evaluation!) ?
-    def __init__(self, text_length, emb_size, device='cpu',
+    def __init__(self, text_length, emb_size, device=torch.device('cpu'),
                  fb_dropout=0.5, predictor_dropout=0.3):
         #TODO docstring
         super(DFGN, self).__init__() #TODO pass the device to the Encoder and the Predictor as well?
@@ -58,7 +58,7 @@ def train(net, train_data, #dev_data,
           dev_data_filepath, dev_preds_filepath, model_save_path,
           para_selector, #TODO sort these nicely
           ps_threshold=0.1,
-          ner_with_gpu=False, training_device='cpu',
+          ner_device=torch.device('cpu'), training_device=torch.device('cpu'),
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=3, batch_size=1, learning_rate=1e-4,
@@ -81,14 +81,9 @@ def train(net, train_data, #dev_data,
     """
     timer = utils.Timer()
 
-    #TODO DELETE THIS
-    torch.cuda.set_device(1) #CLEANUP
-    #TODO THIS IS ONLY FOR DEBUGGING
-
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    tagger_device = 'cuda' if ner_with_gpu else 'cpu'
-    flair.device = torch.device(tagger_device)
+    flair.device = torch.device(ner_device)
     ner_tagger = flair.models.SequenceTagger.load('ner') # this hard-codes flair tagging!
 
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
@@ -99,12 +94,7 @@ def train(net, train_data, #dev_data,
 
     # Set the network into train mode
     net.train()
-
-    cuda_is_available = torch.cuda.is_available() if training_device else False
-    device = torch.device('cuda') if cuda_is_available else torch.device('cpu')
-    # put the net on the GPU if possible
-    if cuda_is_available:
-        net = net.to(device)
+    net = net.to(training_device)
 
     timer("training_preparation")
 
@@ -120,7 +110,7 @@ def train(net, train_data, #dev_data,
         print('Epoch %d/%d' % (epoch + 1, epochs))
         batch_counter = 0
 
-        for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
+        for step, batch in enumerate(tqdm(train_data[16:18], desc="Iteration")): #TODO DELETE THE SLICE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             """ DATA PROCESSING """
             ids = []
@@ -170,7 +160,7 @@ def train(net, train_data, #dev_data,
             labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)] # list[(support, start, end, type)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
-            #print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
+            print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
 
             q_ids_list = [t.to(device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(device) if t is not None else None for t in c_ids_list]
@@ -475,6 +465,11 @@ if __name__ == '__main__':
     take_time("data preparation")
 
 
+    training_device = torch.device('cpu')
+    if cfg("try_training_on_gpu") and torch.cuda.is_available():
+        torch.cuda.set_device(cfg("gpu_number"))
+        training_device = torch.device('cuda')
+    tagger_device = torch.device('cuda') if cfg("use_gpu_for_ner") else torch.device('cpu')
 
 
     # ========== DFGN START
@@ -485,12 +480,11 @@ if __name__ == '__main__':
                       dev_data_raw,
                       eval_data_dump_filepath,
                       cfg)
-
-    device = torch.device('cuda') if cfg("try_training_on_gpu") else 'cpu'
+    take_time("eval_data preparation")
 
     dfgn = DFGN(text_length=cfg("text_length"),
                 emb_size=cfg("emb_size"),
-                device=device,
+                device=training_device,
                 fb_dropout=cfg("fb_dropout"),
                 predictor_dropout=cfg("predictor_dropout"))
 
@@ -502,8 +496,8 @@ if __name__ == '__main__':
                           model_filepath, # where the dfgn model will be saved
                           para_selector,
                           ps_threshold=cfg("ps_threshold"),
-                          ner_with_gpu=cfg("use_gpu_for_ner"),
-                          training_device=device,
+                          ner_device=tagger_device,
+                          training_device=training_device,
                           fb_passes=cfg("fb_passes"),
                           coefs=(cfg("lambda_s"), cfg("lambda_t")),
                           text_length=cfg("text_length"),
