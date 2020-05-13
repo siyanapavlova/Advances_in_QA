@@ -25,7 +25,7 @@ from utils import Timer
 
 # weights for training, because we have imbalanced data:
 # 80% of paragraphs are not important (= class 0) and 20% are important (class 1)
-WEIGHTS = [0.2, 0.8] #CLEANUP? We implemented downscaling instead of this loss weighting
+#WEIGHTS = [0.2, 0.8] #CLEANUP? We implemented downscaling instead of this loss weighting
 
 
 def make_training_data(data,

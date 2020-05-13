@@ -317,8 +317,10 @@ def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1
         for j, s_len in enumerate(s_lens):
             #score = round(sum(o_sup.argmax([pos: pos + s_len])) / s_len)
             # take avg of token-wise scores and round to 0 or 1
-
-            score = round(float(sum([x.argmax() for x in o_sup.T[pos: pos + s_len]]) / float(s_len)))
+            try:
+                score = round(float(sum([x.argmax() for x in o_sup.T[pos: pos + s_len]]) / float(s_len)))
+            except ZeroDivisionError:
+                score = 0
             if score == 1:
                 sup_fact_pairs.append([para[0], j])
             pos += s_len
