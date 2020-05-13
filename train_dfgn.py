@@ -112,7 +112,7 @@ def train(net, train_data, #dev_data,
         print('Epoch %d/%d' % (epoch + 1, epochs))
         batch_counter = 0
 
-        for step, batch in enumerate(tqdm(train_data[162:], desc="Iteration")):
+        for step, batch in enumerate(tqdm(train_data, desc="Iteration")):
 
             """ DATA PROCESSING """
             ids = []
@@ -271,7 +271,12 @@ def train(net, train_data, #dev_data,
         torch.save(net, model_save_path)
 
     losses_with_batchsizes = [(b, t[0], t[1], t[2], t[3], t[4]) for b,t in zip(real_batch_sizes, losses)]
-    return (losses_with_batchsizes, dev_scores, timer) if timed else (losses_with_batchsizes, dev_scores)
+
+    if timed:
+        return losses_with_batchsizes, dev_scores, graph_logging, point_usage, timer
+    else:
+        return losses_with_batchsizes, dev_scores, graph_logging, point_usage
+
 
 
 
@@ -516,27 +521,31 @@ if __name__ == '__main__':
                 fb_dropout=cfg("fb_dropout"),
                 predictor_dropout=cfg("predictor_dropout"))
 
-    losses, dev_scores, train_times = train(dfgn, #TODO watch out with the parameter sorting!
-                          train_data_raw, # in batches
-                          #dev_data_raw, # not needed for pre-processing during evaluation
-                          eval_data_dump_filepath, # for reading processed dev_data_raw
-                          eval_preds_dump_filepath, # for dumping predictions during evaluation
-                          model_filepath, # where the dfgn model will be saved
-                          para_selector,
-                          ps_threshold=cfg("ps_threshold"),
-                          ner_device=tagger_device,
-                          training_device=training_device,
-                          fb_passes=cfg("fb_passes"),
-                          coefs=(cfg("lambda_s"), cfg("lambda_t")),
-                          text_length=cfg("text_length"),
-                          epochs=cfg("epochs"),
-                          batch_size=cfg("batch_size"),
-                          learning_rate=cfg("learning_rate"),
-                          eval_interval=cfg("eval_interval"),
-                          verbose_evaluation=cfg("verbose_evaluation"),
-                          timed=True)
+    losses, dev_scores, graph_logging, point_usage, train_times = train(
+        dfgn, #TODO watch out with the parameter sorting!
+        train_data_raw, # in batches
+        eval_data_dump_filepath, # for reading processed dev_data_raw
+        eval_preds_dump_filepath, # for dumping predictions during evaluation
+        model_filepath, # where the dfgn model will be saved
+        para_selector,
+        ps_threshold=cfg("ps_threshold"),
+        ner_device=tagger_device,
+        training_device=training_device,
+        fb_passes=cfg("fb_passes"),
+        coefs=(cfg("lambda_s"), cfg("lambda_t")),
+        text_length=cfg("text_length"),
+        epochs=cfg("epochs"),
+        batch_size=cfg("batch_size"),
+        learning_rate=cfg("learning_rate"),
+        eval_interval=cfg("eval_interval"),
+        verbose_evaluation=cfg("verbose_evaluation"),
+        timed=True)
 
     take_time("training")
+
+
+
+
 
 
     # ========== LOGGING
@@ -559,6 +568,17 @@ if __name__ == '__main__':
         take_time("saving results")
         take_time.total()
         f.write("\n Overall times taken:\n" + str(take_time) + "\n")
+
+        # graph_logging = [total nodes, total connections, number of graphs]
+        f.write("\nGraph statistics:\n")
+        f.write("connections per node:       " + str(graph_logging[1] / float(graph_logging[0])) + "\n")
+        f.write("nodes per graph (limit:40): " + str(graph_logging[0] / float(graph_logging[2])) + "\n")
+
+        # point_usage = [used points, unused points]
+        f.write("\nData usage statistics:\n")
+        f.write("Overall points:       " + str(sum(point_usage)) + "\n")
+        f.write("used / unused points: " + str(point_usage[0]) + "/" + str(point_usage[1]) + "\n")
+        f.write("Ratio:                " + str(point_usage[0] / float(sum(point_usage))) + "\n")
 
     print("\nTimes taken:\n", take_time)
     print("done.")
