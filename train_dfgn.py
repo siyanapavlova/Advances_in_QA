@@ -577,8 +577,8 @@ if __name__ == '__main__':
         # point_usage = [used points, unused points]
         f.write("\nData usage statistics:\n")
         f.write("Overall points:       " + str(sum(point_usage)) + "\n")
-        f.write("used / unused points: " + str(point_usage[0]) + "/" + str(point_usage[1]) + "\n")
-        f.write("Ratio:                " + str(point_usage[0] / float(sum(point_usage))) + "\n")
+        f.write("used/unused points:   " + str(point_usage[0]) + " / " + str(point_usage[1]) + "\n")
+        f.write("Ratio of used points: " + str(point_usage[0] / float(sum(point_usage))) + "\n")
 
     print("\nTimes taken:\n", take_time)
     print("done.")

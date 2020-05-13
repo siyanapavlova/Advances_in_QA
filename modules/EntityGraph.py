@@ -321,8 +321,8 @@ class EntityGraph():
                 mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
 
                 #print("Items in mapping:") #CLEANUP
-                for id, toks in mapping.items():
-                    print(id, [self.tokens[t] for t in toks]) #CLEANUP
+                #for id, toks in mapping.items():
+                #    print(id, [self.tokens[t] for t in toks]) #CLEANUP
             else:
                 pass # no entity in the stack, so we have an empty mapping
 
