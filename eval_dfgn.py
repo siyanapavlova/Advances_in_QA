@@ -15,7 +15,7 @@ import utils
 from utils import Timer
 from utils import HotPotDataHandler
 from utils import ConfigReader
-from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
+from modules import ParagraphSelector, EntityGraph
 from train_dfgn import predict
 
 

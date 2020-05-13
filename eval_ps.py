@@ -28,7 +28,7 @@ cfg = ConfigReader(args.config_file)
 
 model_abs_path = cfg('model_abs_dir') + args.model_name + "/"
 results_abs_path = model_abs_path + args.model_name + ".test_scores"
-predictions_abs_path = cfg('predictions_abs_dir') + args.model_name + ".predicitons"
+predictions_abs_path = cfg('predictions_abs_dir') + args.model_name + ".predictions"
 
 # check all relevant file paths and directories before starting training
 try:
