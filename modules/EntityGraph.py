@@ -274,79 +274,79 @@ class EntityGraph():
 
         mapping = {}  # this will contain the result:  {ID:[token_nums]}
 
-        #try:
-        # ====================================
-        if entity_stack: # only 'populate' the mapping if there are any entities!
-            entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
-            entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
-            ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
-            assert type(entity[1]) is list
+        try:
+            # ====================================
+            if entity_stack: # only 'populate' the mapping if there are any entities!
+                entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+                entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+                ent_chars = "".join(entity[1]) # all words of the entity as a single string without spaces
+                assert type(entity[1]) is list
 
-            print("CONTEXT:\n",self.context)  # CLEANUP
-            print("GRAPH:\n",self)  # CLEANUP
+                print("CONTEXT:\n",self.context)  # CLEANUP
+                print("GRAPH:\n",self)  # CLEANUP
 
-            print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+                print(f"first entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
 
-            all_chars = ""
-            for i, t in enumerate(self.tokens):
-                print(f"#===== new token (i, t): {i} {t}") #CLEANUP
+                all_chars = ""
+                for i, t in enumerate(self.tokens):
+                    print(f"#===== new token (i, t): {i} {t}") #CLEANUP
 
-                all_chars += t.strip("#").lower()
-                print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
+                    all_chars += t.strip("#").lower()
+                    print(f"   end of all_chars: {all_chars[-50:]}")  # CLEANUP
 
-                if all_chars.endswith(ent_chars):
-                    print(f"   found an entity: {ent_chars}")  # CLEANUP
-                    tok_num = 0
-                    query = ""
-                    while query != ent_chars:
-                        print(f"      no match. (query,ent_chars): {query[:-80]} - {ent_chars}")  # CLEANUP
-                        query = self.tokens[i-tok_num].strip("#").lower() + query # grow a string backwards
-                        tok_num += 1 # count up the number of tokens needed to build ent_chars
-                        #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
+                    if all_chars.endswith(ent_chars):
+                        print(f"   found an entity: {ent_chars}")  # CLEANUP
+                        tok_num = 0
+                        query = ""
+                        while query != ent_chars:
+                            print(f"      no match. (query,ent_chars): {query[:-80]} - {ent_chars}")  # CLEANUP
+                            query = self.tokens[i-tok_num].strip("#").lower() + query # grow a string backwards
+                            tok_num += 1 # count up the number of tokens needed to build ent_chars
+                            #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
 
-                    if entity[0] not in mapping: # new entry with the ID as key
-                        mapping[entity[0]] = [i-x for x in range(tok_num)]
-                        print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
-                    else:
-                        mapping[entity[0]].extend([i-x for x in range(tok_num)])
+                        if entity[0] not in mapping: # new entry with the ID as key
+                            mapping[entity[0]] = [i-x for x in range(tok_num)]
+                            print(f"   added mapping for entity ID {entity[0]}: {mapping[entity[0]]}")  # CLEANUP
+                        else:
+                            mapping[entity[0]].extend([i-x for x in range(tok_num)])
 
-                    if entity_stack: # avoid empty stack errors
-                        entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
-                        entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
-                        ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
-                        assert type(entity[1]) is list
-                        print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
-                    else:
-                        break
+                        if entity_stack: # avoid empty stack errors
+                            entity = entity_stack.pop(0)  # tuple: (ID, entity_string)
+                            entity = (entity[0], entity[1].lower().split())  # tuple: (ID, list(str))
+                            ent_chars = "".join(entity[1])  # all words of the entity as a single string without spaces
+                            assert type(entity[1]) is list
+                            print(f"new entity (ID, mention, chars): {entity[0]} {entity[1]} {ent_chars}")  # CLEANUP
+                        else:
+                            break
 
-            mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
+                mapping = {k:sorted(v) for k,v in mapping.items()} # sort values
 
-            print("Items in mapping:") #CLEANUP
-            for id, toks in mapping.items():
-                print(id, [self.tokens[t] for t in toks]) #CLEANUP
-        else:
-            pass # no entity in the stack, so we have an empty mapping
+                print("Items in mapping:") #CLEANUP
+                for id, toks in mapping.items():
+                    print(id, [self.tokens[t] for t in toks]) #CLEANUP
+            else:
+                pass # no entity in the stack, so we have an empty mapping
 
 
-        # add the mapping of entity to token numbers to the graph's nodes
-        if add_token_mapping_to_graph:
-            print("\nself.graph.keys() =", self.graph.keys()) #CLEANUP
-            print("   mapping.keys() =", mapping.keys(),"\n") #CLEANUP
-            for id in self.graph:
-                self.graph[id].update({"token_ids":mapping[id]})
+            # add the mapping of entity to token numbers to the graph's nodes
+            if add_token_mapping_to_graph:
+                print("\nself.graph.keys() =", self.graph.keys()) #CLEANUP
+                print("   mapping.keys() =", mapping.keys(),"\n") #CLEANUP
+                for id in self.graph:
+                    self.graph[id].update({"token_ids":mapping[id]})
 
-        """ create binary matrix from the mapping """
-        M = np.zeros((len(self.tokens), len(mapping)), dtype="float32")
-        for n_i, (node,tokens) in enumerate(mapping.items()):
-            for t_i, token in enumerate(tokens):
-                M[t_i][n_i] = 1
+            """ create binary matrix from the mapping """
+            M = np.zeros((len(self.tokens), len(mapping)), dtype="float32")
+            for n_i, (node,tokens) in enumerate(mapping.items()):
+                for t_i, token in enumerate(tokens):
+                    M[t_i][n_i] = 1
 
-        return torch.from_numpy(M)
+            return torch.from_numpy(M)
 
-        #except IndexError as e:
-        #    print("In EntityGraph.entity_matrix(): something went wrong. Continuing without this data point (sorry, folks!)")
-        #    self.graph = {}
-        #    return None
+        except IndexError as e:
+            print("In EntityGraph.entity_matrix(): something went wrong. Continuing without this data point (sorry, folks!)")
+            self.graph = {}
+            return None
 
     def flatten_context(self, siyana_wants_a_oneliner=False):
         """
