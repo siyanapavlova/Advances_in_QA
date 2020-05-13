@@ -9,7 +9,7 @@ import os
 import sys
 import re
 import json
-#from tqdm import tqdm
+from tqdm import tqdm
 from time import time
 from torch import nn
 import torch
@@ -366,7 +366,7 @@ class HotPotDataHandler():
         id_to_list_index = {point['_id']: i for i, point in enumerate(self.data)}
 
         eval_data = []
-        for point in dev_data:
+        for point in tqdm(dev_data, desc="eval_data prep."):
             context = para_selector.make_context(point, # TODO sort out parameter passing via config (this should use the gpu if possible)
                                                  threshold=cfg("ps_threshold"),
                                                  context_length=cfg("text_length"))
