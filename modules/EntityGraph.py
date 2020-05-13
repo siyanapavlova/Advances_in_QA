@@ -300,10 +300,10 @@ class EntityGraph():
                     tok_num = 0
                     query = ""
                     while query != ent_chars:
-                        print(f"      no match (query,ent_chars): {query} - {ent_chars}")  # CLEANUP
+                        print(f"      no match. (query,ent_chars): {query[:-80]} - {ent_chars}")  # CLEANUP
                         query = self.tokens[i-tok_num].strip("#").lower() + query # grow a string backwards
                         tok_num += 1 # count up the number of tokens needed to build ent_chars
-                        print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
+                        #print(f"      new query, new tok_num: {query} - {tok_num}")  # CLEANUP
 
                     if entity[0] not in mapping: # new entry with the ID as key
                         mapping[entity[0]] = [i-x for x in range(tok_num)]

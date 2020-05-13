@@ -90,6 +90,8 @@ def train(net, train_data, #dev_data,
 
     losses = []
     real_batch_sizes = []  # some data points are not usable; this logs the real sizes
+    graph_logging = [0, 0, 0] # [total nodes, total connections, number of graphs]
+    point_usage = [0, 0] # [used points, unused points]
     dev_scores = []
 
     # Set the network into train mode
@@ -134,8 +136,14 @@ def train(net, train_data, #dev_data,
                     queries.append(point[2])
                     contexts.append(context)
                     graphs.append(graph)
+                    graph_logging = [a+b # [total nodes, total connections, number of graphs]
+                                     for a,b in zip(graph_logging, [len(graph.graph),
+                                                                    len(graph.relation_triplets()),
+                                                                    1])]
+                    point_usage[0] += 1
                 else: # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
                     useless_datapoint_inds.append(i)
+                    point_usage[1] += 1
 
             batch = [point for point in batch if point[0] in ids] # update the batch to exclude useless data points
 
