@@ -2,44 +2,21 @@
 
 
 
-#TODO
-# - input config
-# - load data
-# - load PS ps = torch.load()
-# - load DFGN = torch.load()
-# - if we want to exclude PS errors: call make_eval_data and evaluate on the resulting data
-# - call train_dfgn.evaluate()
-# - output results
-
-
+import os, sys, argparse
+import json
 import torch
+from tqdm import tqdm
 
+import flair # for NER in the EntityGraph
+from transformers import BertTokenizer
+import hotpot_evaluate_v1 as official_eval_script
+
+import utils
 from utils import Timer
 from utils import HotPotDataHandler
 from utils import ConfigReader
-
-from modules import ParagraphSelector
-from train_dfgn import DFGN
-
-import argparse
-import sys
-import os
-
-
-
-import os, sys, argparse
-import pickle # mainly for training data
-import torch
-import json
-from tqdm import tqdm
-from sklearn.model_selection import train_test_split
-from transformers import BertTokenizer
-
-import hotpot_evaluate_v1 as official_eval_script
-import flair # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 from train_dfgn import predict
-import utils
 
 
 
@@ -105,7 +82,6 @@ def prepare_prediction(raw_data_points,
         return ids, queries, contexts, graphs, sent_lengths,\
                timer, graph_log, point_usage_log
 
-
 def encode_to_device(queries, contexts, graphs, encoder, device, timer):
     """
     #TODO docstring
@@ -129,7 +105,83 @@ def encode_to_device(queries, contexts, graphs, encoder, device, timer):
 
     return q_ids_list, c_ids_list, graphs, timer
 
+def output_scores(metrics, mode='print', filehandle=None):
+    """
 
+    :param metrics:
+    :param mode:
+    :param filepath:
+    :return:
+    """
+    if mode == 'print':
+        print("=========================")
+        print("ANSWER SCORES")
+        print("Precision:  ", metrics["prec"])
+        print("Recall:     ", metrics["recall"])
+        print("F score:    ", metrics["f1"])
+        print("exact match:", metrics["em"])
+        print('-------------------------\n')
+        print("SUPPORTING FACT SCORES")
+        print("Precision:  ", metrics["sp_prec"])
+        print("Recall:     ", metrics["sp_recall"])
+        print("F score:    ", metrics["sp_f1"])
+        print("exact match:", metrics["sp_em"])
+        print('-------------------------\n')
+        print("SUPPORTING FACT SCORES")
+        print("Precision:  ", metrics["joint_prec"])
+        print("Recall:     ", metrics["joint_recall"])
+        print("F score:    ", metrics["joint_f1"])
+        print("exact match:", metrics["joint_em"])
+        print('=========================\n')
+    elif mode == 'write' and filehandle:
+        f.write("\n=========================")
+        f.write("\nANSWER SCORES")
+        f.write("\nPrecision:  " + str(metrics["prec"]))
+        f.write("\nRecall:     " + str(metrics["recall"]))
+        f.write("\nF score:    " + str(metrics["f1"]))
+        f.write("\nexact match:" + str(metrics["em"]))
+        f.write('\n-------------------------\n')
+        f.write("\nSUPPORTING FACT SCORES")
+        f.write("\nPrecision:  " + str(metrics["sp_prec"]))
+        f.write("\nRecall:     " + str(metrics["sp_recall"]))
+        f.write("\nF score:    " + str(metrics["sp_f1"]))
+        f.write("\nexact match:" + str(metrics["sp_em"]))
+        f.write('\n-------------------------\n')
+        f.write("\nSUPPORTING FACT SCORES")
+        f.write("\nPrecision:  " + str(metrics["joint_prec"]))
+        f.write("\nRecall:     " + str(metrics["joint_recall"]))
+        f.write("\nF score:    " + str(metrics["joint_f1"]))
+        f.write("\nexact match:" + str(metrics["joint_em"]))
+        f.write('\n=========================\n')
+    else:
+        print("WARNING: could neither print, nor write the scores!",
+              "Check your file paths!")
+
+def write_results(filename, metrics, timer, graph_stats, point_stats):
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write("Configuration in: " + args.config_file + "\n")
+        f.write("Outputs in:  " + predictions_abs_path + "\n")
+        f.write("\n")
+        f.write("Evaluation parameters:\n" + str(cfg) + "\n")
+        f.write("\n")
+        output_scores(metrics, mode='write', filehandle=f)
+
+        timer.total()
+        f.write("\n\nTIMES TAKEN:\n" + str(timer))
+        print("\ntimes taken:\n", timer)
+
+        # graph_logging = [total nodes, total connections, number of graphs]
+        f.write("\nGRAPH STATISTICS:\n")
+        f.write("connections per node:       " + str(graph_stats[1] / float(graph_stats[0])) + "\n")
+        f.write("nodes per graph (limit:40): " + str(graph_stats[0] / float(graph_stats[2])) + "\n")
+
+        # point_usage = [used points, unused points]
+        f.write("\nDATA USAGE STATISTICS:\n")
+        f.write("Overall points:       " + str(sum(point_stats)) + "\n")
+        f.write("used/unused points:   " + str(point_stats[0]) + " / " + str(point_stats[1]) + "\n")
+        f.write("Ratio of used points: " + str(point_stats[0] / float(sum(point_stats))) + "\n")
+
+        return timer
 
 # =========== PARAMETER INPUT
 take_time = Timer()
@@ -203,6 +255,8 @@ take_time("model loading")
 
 # =========== PREDICTIONS
 counter = 0 # counts up with each question ( = each data point)
+graph_stats = []
+point_usage_stats = []
 
 batch_size = data_limit if not cfg(["prediction_batch_size"]) else cfg(["prediction_batch_size"])
 for pos in range(0, data_limit, batch_size):
@@ -243,111 +297,22 @@ for pos in range(0, data_limit, batch_size):
         json.dump({"answer": answers, "sp": sp}, f)
     take_time.again("dump_predictions")
 
+    graph_stats = [old+new for old,new in zip(graph_stats, graph_log)]
+    point_usage_stats = [old+new for old,new in zip(point_usage_stats, point_usage_log)]
+
 
 
 #=========== EVALUATION
-metrics = official_eval_script.eval(predictions_abs_path, cfg("test_data_abs_path"))
-
-o_sup, o_start, o_end, o_type = net(query, context, graph,
-                                        fb_passes=fb_passes)  # (M, 2), (M), (M), (1, 3)
-    sups.append(o_sup)
-    starts.append(o_start)
-    ends.append(o_end)
-    types.append(o_type)
-
-sups = torch.stack(sups)  # (batch, M, 2)
-starts = torch.stack(starts)  # (batch, 1, M)
-ends = torch.stack(ends)  # (batch, 1, M)
-types = torch.stack(types)  # (batch, 1, 3)
-
-
-
-
-THE FOLLOWING IS FROM eval_ps.py
 print("Evaluating...")
-precision, recall, f1, accuracy, ids, y_true, y_pred = model.evaluate(raw_data[:data_limit],
-                                                            threshold=cfg("threshold"),
-                                                            text_length=cfg("text_length"),
-                                                            try_gpu=cfg("try_gpu"))
-print("Precision:", precision)
-print("Recall:   ", recall)
-print("F score:  ", f1)
-print("Accuracy: ", accuracy)
-print('----------------------')
+metrics = official_eval_script.eval(predictions_abs_path, cfg("test_data_abs_path"))
+#{'em',       'f1',       'prec',       'recall',
+# 'sp_em',    'sp_f1',    'sp_prec',    'sp_recall',
+# 'joint_em', 'joint_f1', 'joint_prec', 'joint_recall'}
+
+output_scores(metrics, mode='print')
 take_time("evaluation")
 
-with open(predictions_abs_path, 'w', encoding='utf-8') as f:
-    for i in range(len(ids)):
-        f.write(ids[i] + "\t" + \
-                ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
-                ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
-
-with open(results_abs_path, 'w', encoding='utf-8') as f:
-    f.write("Configuration in: " + args.config_file + "\n")
-    f.write("Outputs in:  " + predictions_abs_path + \
-            "\nPrecision: " + str(precision) + \
-            "\nRecall:    " + str(recall) + \
-            "\nF score:   " + str(f1) +
-            "\nAccuracy:  " + str(accuracy) + "\n")
-    f.write("Hyper parameters:\n" + str(cfg))
-
-    take_time.total()
-    f.write("\n\nTimes taken:\n" + str(take_time))
-    print("\ntimes taken:\n", take_time)
-
-
-
-
-
-THE FOLLOWING IS FROM train_dfgn.py
-# ========= END OF TRAINING =============#
-    metrics = evaluate(net,  # TODO make this prettier
-                       tokenizer, ner_tagger,
-                       training_device, dev_data_filepath, dev_preds_filepath,
-                       fb_passes=fb_passes,
-                       text_length=text_length,
-                       verbose=verbose_evaluation)
-    score = metrics["joint_f1"]
-    dev_scores.append(metrics)  # appends the whole dict of metrics
-    if score >= best_score:
-        torch.save(net,
-                   model_save_path)
-
-    if not a_model_was_saved_at_some_point:  # make sure that there is a model file
-        print(f"saving model to {model_save_path}...")
-        torch.save(net, model_save_path)
-
-# ========== LOGGING
-print(f"Saving losses in {losses_abs_path}...")
-with open(losses_abs_path, "w") as f:
-    f.write("batch_size\toverall_loss\tsup_loss\tstart_loss\tend_loss\ttype_loss\n")
-    f.write("\n".join(["\t".join([str(l) for l in step]) for step in losses]))
-
-print(f"Saving dev scores in {devscores_abs_path}...")
-with open(devscores_abs_path, "w") as f:
-    for metrics_dict in dev_scores:
-        f.write(str(metrics_dict))  # this can be parsed with ast.literal_eval() later on
-
-print(f"Saving config and times taken to {traintime_abs_path}...")
-with open(traintime_abs_path, 'w', encoding='utf-8') as f:
-    f.write("Configuration in: " + args.config_file + "\n")
-    f.write(str(cfg) + "\n")
-
-    f.write("\n Times taken per step:\n" + str(train_times) + "\n")
-    take_time("saving results")
-    take_time.total()
-    f.write("\n Overall times taken:\n" + str(take_time) + "\n")
-
-    # graph_logging = [total nodes, total connections, number of graphs]
-    f.write("\nGraph statistics:\n")
-    f.write("connections per node:       " + str(graph_logging[1] / float(graph_logging[0])) + "\n")
-    f.write("nodes per graph (limit:40): " + str(graph_logging[0] / float(graph_logging[2])) + "\n")
-
-    # point_usage = [used points, unused points]
-    f.write("\nData usage statistics:\n")
-    f.write("Overall points:       " + str(sum(point_usage)) + "\n")
-    f.write("used/unused points:   " + str(point_usage[0]) + " / " + str(point_usage[1]) + "\n")
-    f.write("Ratio of used points: " + str(point_usage[0] / float(sum(point_usage))) + "\n")
-
+#========== LOGGING
+take_time = write_results(results_abs_path, metrics, take_time, graph_stats, point_usage_stats)
 print("\nTimes taken:\n", take_time)
 print("done.")
