@@ -32,8 +32,11 @@ def make_training_data(data,
                        text_length=512,
                        tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
     """
-    #TODO talk about downsampling!!! (only taking 2 of the uninformative paragraphs as negative data!)
     Make a train tensor for each datapoint.
+
+    Note on downsampling: HotPotQA's distractor dev set has 2 relevant
+    and 8 irrelevant paragraphs for each question. In order to avoid
+    having unbalanced data, we take the only the first 2 irrelevant paragraphs.
 
     :param data: question ID, supporting facts, question, and paragraphs, 
                  as returned by HotPotDataHandler
@@ -118,11 +121,9 @@ class ParagraphSelector():
             """
             def __init__(self, config):#, input_size=768, output_size=1):
                 """
-                #TODO update the docstring
                 Initialization of the encoder model and a linear layer
 
-                :param intput_size: input size for the linear layer
-                :param output_size: output size of the linear layer
+                :param config: config as required by BertPreTrainedModel
                 """
                 super(ParagraphSelectorNet, self).__init__(config)
                 self.bert = BertModel(config)#('bert-base-uncased',
@@ -133,7 +134,6 @@ class ParagraphSelector():
 
             def forward(self, token_ids):
                 """
-                #TODO update the docstring
                 Forward function of the ParagraphSelectorNet.
                 Takes in token_ids corresponding to a query+paragraph
                 and returns a relevance score (between 0 and 1) for
@@ -161,21 +161,11 @@ class ParagraphSelector():
                 return output
         
         # initialise a paragraph selector net and try to load
-
-
         self.config = BertConfig.from_pretrained(model_path)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
         self.net = ParagraphSelectorNet.from_pretrained(model_path,
                                                         from_tf=bool(".ckpt" in model_path),
                                                         config=self.config)  # , cache_dir=args.cache_dir if args.cache_dir else None,)
 
-        '''
-        self.net = ParagraphSelectorNet(self.config)
-        if model_path:
-            try:
-                self.net.load_state_dict(torch.load(model_path))
-            except FileNotFoundError as e:
-                print(e, model_path)
-        '''
 
     def train(self, train_data, dev_data, model_save_path,
               epochs=10, batch_size=1, learning_rate=0.0001, eval_interval=None, try_gpu=True):
@@ -273,8 +263,8 @@ class ParagraphSelector():
     
     def evaluate(self, data, threshold=0.1, text_length=512, try_gpu=True):
         """
-        #TODO mention here that it makes labels on the fly (per question)
         Evaluate a trained model on a dataset.
+        True labels on the evaluation datapoints are made in this function as well.
 
         :param data: a list of datapoints where each point has the
                      following structure:
@@ -292,7 +282,7 @@ class ParagraphSelector():
                           threshold, become part of the context,
                           default is 0.1
         :param text_length: text_length of the paragraph - paragraph will
-                            be padded if its lenght is less than this value
+                            be padded if its length is less than this value
                             and trimmed if it is more, default is 512
         :param try_gpu: boolean specifying whether to use GPU for
                         computation if GPU is available; default is True
@@ -308,7 +298,7 @@ class ParagraphSelector():
                           booleans; each boolean corresponds to whether
                           the corresponding paragraph is relevant to
                           the query or not
-        :return all_pred: precited labels for the datapoints
+        :return all_pred: predicted labels for the datapoints
                           list(list(boolean)), a list of datapoints
                           where each datapoint is a list of 
                           booleans; each boolean corresponds to whether
@@ -338,8 +328,6 @@ class ParagraphSelector():
             all_true.append(para_true)
             all_pred.append(para_pred)
             ids.append(point[0])
-            #print(f"in evaluate(): true: {para_true}") #CLEANUP
-            #print(f"          predicted: {para_pred}")
 
         # Flatten the lists so they can be passed to the precision and recall funtions
         all_true_flattened = [point for para in all_true for point in para]
@@ -372,7 +360,6 @@ class ParagraphSelector():
         #    p = p.to(device) #CLEANUP?
         #self.net.eval() #CLEANUP?
 
-
         p = p.to(device)
         score = self.net(p)
         return score
@@ -400,16 +387,18 @@ class ParagraphSelector():
                           paragraphs that get a score above the
                           threshold, become part of the context,
                           default is 0.1
-        :param text_length: text_length of the paragraph - paragraph will #TODO update this: paragraph-individual trimming
+        :param text_length: text_length of the paragraph - paragraph will
                             be padded if its length is less than this value
-                            and trimmed if it is more, default is 512
+                            and trimmed if it is more, default is 512.
+                            The trimming happens by paragraph, so that all
+                            paragraphs in the context are of equal length (text_length / num_paragraphs)
         :param device: device for processing; default is 'cpu'
 
-        :return context: the context for the datapoint (title and paragraph are ids) # TODO downdate this!
+        :return context: the context for the datapoint
                 shape: [ [[p1_title], [p1_s1, p1_s2, ...]],
                          [[p2_title], [p2_s1, p2_s2, ...]],
                         ...]
-
+                        The p*_title and p*_s* are strings.
         """
 
         # for the case that a user picks a limit greater than BERT's max length
@@ -474,14 +463,7 @@ class ParagraphSelector():
         trimmed_context = [] # new data structure because we prioritise computing time over memory usage
         cut_off_point = 0 if not context else math.floor(context_length/len(context)) # roughly cut to an even length
 
-        #print(f"in ParagraphSelector.make_context() before trimming:")  # CLEANUP
-        #pprint(context) #CLEANUP
-        #print("\n") #CLEANUP
         for i, (header, para) in enumerate(context):
-
-            #TODO 2020-05-11 continue here: what about that warning? And why does it not pad/trim too much?
-            # what does the ParagraphSelector actually get as input?
-
             if len(header) >= cut_off_point:
                 trimmed_context.append([self.tokenizer.decode(header[:cut_off_point]), []])
                 continue # don't even look at the paragraph
@@ -501,10 +483,6 @@ class ParagraphSelector():
                     trimmed_context[i][1].append(s) # append non-trimmed sentence to the context
                     pos += len(sentence) # go to the next sentence
 
-        #print(f"in ParagraphSelector.make_context() (END):") #CLEANUP
-        #print(f"trimmed context:") #CLEANUP
-        #pprint(f"{trimmed_context}") #CLEANUP
-        #print("\n") #CLEANUP
         return (trimmed_context, para_indices) if numerated else trimmed_context
 
     def save(self, savepath):
@@ -519,97 +497,3 @@ class ParagraphSelector():
         if not os.path.exists(directory_name):
             os.makedirs(directory_name)
         torch.save(self.net.state_dict(), savepath)
-
-if __name__ == "__main__":
-    #TODO update this to match train_ps.py
-    timer = Timer()
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_file', metavar='config', type=str,
-                        help='configuration file for training')
-    args = parser.parse_args()
-
-    cfg = ConfigReader(args.config_file)
-
-    dataset_size = cfg("training_dataset_size")
-    test_split = cfg("test_split")
-    shuffle_seed = cfg("shuffle_seed")
-    text_length = cfg("text_length") # limits paragraph length in order to reduce complexity
-
-    epochs = cfg("epochs")
-    batch_size = cfg("batch_size")
-    learning_rate = cfg("learning_rate")
-
-    training_data_rel_path = cfg("training_data_rel_path")
-    model_rel_path =  cfg("model_rel_path")
-    losses_rel_path = cfg("losses_rel_path")
-    predictions_rel_path = cfg("predictions_rel_path")
-    performance_rel_path = cfg("performance_rel_path")
-
-
-    print("Reading data...")
-    dh = HotPotDataHandler(parent_dir + training_data_rel_path)
-    data = dh.data_for_paragraph_selector()
-    timer("data_input")
-
-    print("Splitting data...")
-    training_data_raw, test_data_raw = train_test_split(data[:dataset_size],
-                                                        test_size=test_split,
-                                                        random_state=shuffle_seed,
-                                                        shuffle=True)
-    train_tensor = make_training_data(training_data_raw, text_length=text_length)
-    timer("data_splitting")
-
-    print("Initilising ParagraphSelector...")
-    ps = ParagraphSelector()
-    losses = ps.train(train_tensor,
-                      epochs=epochs,
-                      batch_size=batch_size,
-                      learning_rate=learning_rate)
-    timer("training")
-
-    print("Saving model and losses...")
-    ps.save(parent_dir + model_rel_path)
-    with open(parent_dir + losses_rel_path, "w") as f:
-        f.write("\n".join([str(l) for l in losses]))
-    timer("saving_model")
-
-
-    print("Evaluating...") #TODO make sure that this works (too many values to unpack?)
-    precision, recall, f1, ids, y_true, y_pred = ps.evaluate(test_data_raw,
-                                                             text_length=text_length,
-                                                             try_gpu=True)
-    print('----------------------')
-    print("Precision:", precision)
-    print("Recall:", recall)
-    print("F score:", f1)
-    timer("evaluation")
-
-    if not os.path.exists(parent_dir + "/models/outputs/"):
-        os.makedirs(parent_dir + "/models/outputs/")
-
-    with open(parent_dir + predictions_rel_path, 'w', encoding='utf-8') as f:
-        for i in range(len(ids)):
-            f.write(ids[i] + "\t" + \
-                    ','.join([str(int(j)) for j in y_true[i]]) + "\t" + \
-                    ','.join([str(int(j)) for j in y_pred[i]]) + "\n")
-
-    with open(parent_dir + performance_rel_path, 'w', encoding='utf-8') as f:
-        f.write("Configuration in: " + args.config_file + "\n")
-        f.write("Outputs in:  " + parent_dir + predictions_rel_path + \
-                "\nPrecision: " + str(precision) + \
-                "\nRecall:    " + str(recall) + \
-                "\nF score:   " + str(f1) + "\n")
-        f.write("Hyper parameters:" + \
-                "\ndataset size: " + str(dataset_size) + \
-                "\ntest split:   " + str(test_split) + \
-                "\nshuffle seed: " + str(shuffle_seed) + \
-                "\ntext length:  " + str(text_length) + \
-                "\nepochs:       " + str(epochs) + \
-                "\nbatch size:   " + str(batch_size))
-
-        timer.total()
-        f.write("\n\nTimes taken:\n" + str(timer))
-        print("\ntimes taken:\n", timer)
-
-

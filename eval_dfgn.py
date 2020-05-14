@@ -1,7 +1,5 @@
 """ This script is for evaluation of a DFGN model (including Paragraph Selector) """
 
-
-
 import os, sys, argparse
 import json
 import torch
@@ -19,19 +17,21 @@ from modules import ParagraphSelector, EntityGraph
 from train_dfgn import predict, DFGN
 
 
-
-
 def prepare_prediction(raw_data_points,
                        para_selector, ps_threshold, text_length,
                        ner_tagger,
                        timer):
     """
-    #TODO docstring
+    Starting from a raw point (or a list of raw points), prepare all
+    the data structures required by the DFGN module in order to predict
+    an output.
+
     :param raw_data_points: list of raw_points or just a single raw_point
-    :param para_selector:
-    :param ps_threshold:
-    :param text_length:
-    :param ner_tagger:
+    :param para_selector: a ParagraphSelector object
+    :param ps_threshold: threshold for the paragraph selector (relevance score between paragraph and query)
+    :param text_length: max text length for the context
+    :param ner_tagger: NER tagger
+    :param timer: a timer object (see utils)
     :return: required data if possible, or None if data not usable by the network's components
     """
 
@@ -87,8 +87,10 @@ def encode_to_device(queries, contexts, graphs, encoder, device, timer):
     #TODO docstring
     :param queries:
     :param contexts:
+    :param graphs:
     :param encoder:
     :param device:
+    :param timer: a timer object (see utils)
     :return: lists of query/context token id tensors, graphs, timer (all tensor parts moved to the device)
     """
 
@@ -107,11 +109,11 @@ def encode_to_device(queries, contexts, graphs, encoder, device, timer):
 
 def output_scores(metrics, mode='print', filehandle=None):
     """
+    Print results to screen or write them to a file.
 
-    :param metrics:
-    :param mode:
-    :param filepath:
-    :return:
+    :param metrics: a metrics dictionary as returned by the official HotPotQA evaluation script (hotpot_evaluate_v1)
+    :param mode: string - either 'print' or 'write'
+    :param filepath: a filepath where the results should be written if in write mode
     """
     if mode == 'print':
         print("=========================")
@@ -158,6 +160,18 @@ def output_scores(metrics, mode='print', filehandle=None):
               "Check your file paths!")
 
 def write_results(filename, metrics, timer, graph_stats, point_stats):
+    """
+    Write results and stats to file to a file.
+
+    :param filename: path to file where output should be written
+    :param metrics: a metrics dictionary as returned by the official HotPotQA evaluation script (hotpot_evaluate_v1)
+    :param timer: a timer object (utils) used during evaluation
+    :param graph_stats: stats about the EntityGraph instance used,
+                        list[int, int, int] - [total nodes, total connections, number of graphs]
+    :param point_stats: stats about number of used points (unused points are those with no graph connections)
+                        list[int, int] - [used points, unused points]
+    :return: a timer object (utils)
+    """
     with open(filename, 'w', encoding='utf-8') as f:
         f.write("Configuration in: " + args.config_file + "\n")
         f.write("Outputs in:  " + predictions_abs_path + "\n")
@@ -245,7 +259,7 @@ ner_tagger = flair.models.SequenceTagger.load('ner')  # this hard-codes flair ta
 
 para_selector = ParagraphSelector.ParagraphSelector(cfg("ps_model_abs_dir")) # looks for the 'pytorch_model.bin' in this directory
 para_selector.net.eval() # ParagraphSelector itself does not inherit from nn.Module.
-para_selector = para_selector.net.to(device)
+para_selector.net = para_selector.net.to(device)
 
 dfgn = torch.load(model_abs_dir+args.dfgn_model_name)
 dfgn.eval()

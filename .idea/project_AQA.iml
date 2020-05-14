@@ -7,4 +7,7 @@
     <orderEntry type="module" module-name="GWOT" />
     <orderEntry type="module" module-name="data_in_QA" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="versionSpecifier" value="Don't specify version" />
+  </component>
 </module>

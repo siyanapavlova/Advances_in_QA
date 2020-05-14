@@ -2,9 +2,6 @@
 This is for evaluating the paragraph selector.
 """
 
-
-
-
 from utils import Timer
 from utils import HotPotDataHandler
 from utils import ConfigReader
@@ -87,4 +84,3 @@ with open(results_abs_path, 'w', encoding='utf-8') as f:
     take_time.total()
     f.write("\n\nTimes taken:\n" + str(take_time))
     print("\ntimes taken:\n", take_time)
-

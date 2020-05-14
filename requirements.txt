@@ -9,3 +9,4 @@ transformers
 sklearn
 ujson
 pandas
+torch

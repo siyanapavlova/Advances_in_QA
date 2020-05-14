@@ -21,16 +21,20 @@ The intuition is that with multiple iterations, relevant entities propagate thei
 
 ### External and Internal Modules
 - `utils.py` (local) provides helper functions and classes.
+- `torch` [(get it here)](https://pytorch.org/)
 - `tqdm` for progress bars. [(get it here)](https://tqdm.github.io/ "Github")
-- `flair` for named entity recognition (NER) [(get it here)](https://github.com/flairNLP/flair). `Python 3.8` and above cause issues with `flair`, so use a lower version
+- `flair` for named entity recognition (NER) [(get it here)](https://github.com/flairNLP/flair). `Python 3.8` and above cause issues with `flair`, use a lower version. We have run this with `Python 3.6`
 - `pycorenlp.StanfordCoreNLP` for NER (not necessary) [(get it here)](https://stanfordnlp.github.io/CoreNLP/other-languages.html)
 - `transformers` by Huggingface, supplying BERT [(get it here)](https://github.com/huggingface/transformers#installation)
 - `sklearn` mainly for evaluation [(get it here)](https://github.com/scikit-learn/scikit-learn)
 - `ujson` for running the official HotPotQA evaluation script [(get it here)](https://github.com/ultrajson/ultrajson)
 - `pandas` [(get it here)](https://github.com/pandas-dev/pandas)
 
+You can install each of these modules individually or use the `requirements.txt` file:
 
-
+```
+pip install -r requirements.txt
+```
 
 ### Train the Paragraph Selector with `train_ps.py`
 Pass a configuration file and a model name for execution. The model name will be used to **create a directory with all outputs** (model config, model parameters, losses, times, scores during training). Example:

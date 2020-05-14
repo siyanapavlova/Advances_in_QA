@@ -599,7 +599,7 @@ class BiDAFNet(torch.nn.Module):
         z = torch.cat([emb2, y2x_att, emb2 * y2x_att, emb2 * x2y_att], dim=-1)
         z = self.reduction_layer(z)  # (batch, y_len, output_size)
 
-        return z.squeeze(0) if not batch_processing else z # (y_len, output_size) if no batch_processing
+        return z.squeeze(0) if not batch_processing else z  # (y_len, output_size) if no batch_processing
 
 
 

@@ -15,16 +15,9 @@ import torch.nn.functional as F
 class Encoder(torch.nn.Module):
     """
     #TODO update dosctring
-    Use BERT and bidirectional attention flow (BiDAF) to token_ids a query and a
-    context. Both BERT and the BiDAF component are trained.
-    """
-    # relicts from the EncoderBiDAF class:
-    """
-    This class implements bidirectional attention flow (BiDAF) as
-    described in Seo et al. (2016): arxiv.org/pdf/1611.01603.pdf
-    The subsequent code is copied in most parts from Taeuk Kim's
-    Pytorch re-implementation of the above paper:
-    https://github.com/galsang/BiDAF-pytorch
+    Use BERT and bidirectional attention flow (BiDAF) to get a context
+    embedding from a query and a context.
+    Both BERT and the BiDAF component are trained.
     """
 
     def __init__(self, text_length=512, pad_token_id=0, tokenizer=None,
@@ -87,11 +80,9 @@ class Encoder(torch.nn.Module):
                                    dtype=all_token_ids.dtype)
             all_token_ids = torch.cat((all_token_ids, padding))
 
-
         # get the embeddings corresponding to the token IDs
         all_hidden_states, all_attentions = self.encoder_model(all_token_ids.unsqueeze(0))[-2:]
 
-        # Next five lines:
         # This is the embedding of the context + query
         # [-1] = last hidden state
         # [0] = first sentence ('sentence' = sequence of characters)
@@ -109,11 +100,6 @@ class Encoder(torch.nn.Module):
         else:
             c_emb = all_hidden_states[-1][0][len_query:len_query+len_context]
 
-        #print("Query shape:", q_emb.shape) #CLEANUP?
-        #print("Context shape:", c_emb.shape)
-        #print(q_emb)
-        #print(c_emb)
-
         # TODO check whether we actually always return something with text_length!!!
         #  (in cases with large text_length and >512, we might return a context that is shorter than text_length)
         g = self.bidaf(q_emb, c_emb)
@@ -123,7 +109,7 @@ class Encoder(torch.nn.Module):
     def token_ids(self, query=None, context=None):
         """
         return the token IDs of a query and a context
-        :param query: str
+        :param query: str, a question
         :param context: setences, paragraphs, paragraph titles
         :type context: list[list[str,list[str]]]
         :return: list[int], list[int] -- query token IDs, context token IDs
@@ -139,9 +125,9 @@ class Encoder(torch.nn.Module):
                  ["Mary had a little lamb.",
                   " The lamb was called Tony.",
                   " One day, Bill Gates wanted to hire Tony."]],
-                ["All like it but John",
+                ["All like it but Simon",
                  ["Siyana thought that Tony is cute.",
-                  " Well, I also think that he is nice.",
+                  " Well, Yu-Wen also thinks that he is nice.",
                   " Mary, however liked Tony even more than we do."]]
             ]
 
@@ -162,13 +148,3 @@ class Encoder(torch.nn.Module):
                                   range(self.text_length - len(context_input_ids))]
 
         return query_input_ids, context_input_ids
-
-
-    #def predict(self, q_token_ids, c_token_ids): #CLEANUP?
-    #    return self.bidaf(q_token_ids, c_token_ids)
-
-
-
-    
-    
-    

@@ -139,5 +139,3 @@ if __name__ == '__main__':
         f.write("\n\nTimes taken:\n" + str(take_time))
 
     print("\nTimes taken:\n", take_time)
-
-

@@ -63,9 +63,9 @@ class EntityGraph():
                  ["Mary had a little lamb.",
                   " The lamb was called Tony.",
                   " One day, Bill Gates wanted to hire Tony."]],
-                ["All like it but John",
+                ["All like it but Simon",
                  ["Siyana thought that Tony is cute.",
-                  " Well, I also think that he is nice.",
+                  " Well, Yu-Wen also thinks that he is nice.",
                   " Mary, however liked Tony even more than we do."]]
             ]
 
@@ -259,6 +259,7 @@ class EntityGraph():
         Create a mapping (and subsequently, the matrix M) from entity IDs to
         token IDs, having used BertTokenizer for tokenization. If specified,
         the mapping is added to the graph's nodes (under the key 'token_ids').
+        :param add_token_mapping_to_graph: boolean
         :return: torch.Tensor of shape (#tokens, #entities) -- the matrix M
         """
 
@@ -415,4 +416,3 @@ class EntityGraph():
         :return: average degree of the whole graph
         """
         return len(self.relation_triplets())/len(self.graph)
-

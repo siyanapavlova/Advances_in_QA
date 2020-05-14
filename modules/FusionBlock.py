@@ -19,11 +19,11 @@ class FusionBlock(nn.Module):
 
 	def __init__(self, emb_size, device=torch.device('cpu'), dropout=0.0):
 		"""
-		Initialization function for the FusionBlock class
-		#TODO update docstring
-		:param context_emb: context embedding as obtained from Encoder, (M, d2)
-		:param query_emb: query embdding as obrained from Encoder, (L, d2)
-		:param graph: an entity graph as obrained from EntityGraph
+		Initialization function for the FusionBlock class.
+
+		:param emb_size: hidden size of the context embedding; d2 in the paper
+		:param device: torch device on which to train the network, default is torch.device('cpu')
+		:param dropout: dropout rate
 		"""
 		super(FusionBlock, self).__init__()
 
@@ -40,7 +40,6 @@ class FusionBlock(nn.Module):
 		self.g2d_layer = nn.LSTM(2*self.d2, self.d2)
 
 
-
 	def forward(self, context_emb, query_emb, graph, passes=1):
 		"""
 		Forward function of the FusionBlock.
@@ -49,14 +48,15 @@ class FusionBlock(nn.Module):
 		Performs a number of passes through the fusion block.
 		Uses the tok2ent, graph_attention, bidaf (from utils) and 
 		graph2doc functions to do this.
-		At each pass, we get updated context and query embeddings.
-		The context and query embeddings obtained in the last pass
-		are returned.
+		At each pass, we get updated context embeddings. The context
+		embeddings obtained in the last pass are returned.
 
-		:param passes: number of passes through the FusionBlock,
-					   default is 1, experiments in the paper use 2
+		:param context_emb: (M, d2) a context embedding as obtained from Encoder
+		:param query_emb: (L, d2) a query embedding as obtained from Encoder
+		:param graph: an entity graph as obtained from EntityGraph
+		:param passes:  number of passes through the FusionBlock,
+						default is 1, experiments in the paper use 2
 		:return Ct: updated context embedding (M, d2)
-		:return query_emb: updated query embedding (L, d2)
 		"""
 
 		for p in range(passes):
@@ -69,53 +69,50 @@ class FusionBlock(nn.Module):
 
 			Ct = self.graph2doc(updated_entity_embs, graph.M, context_emb) # (M, d2)
 			context_emb = Ct # update the context embeddings for the next pass
-			#print(f"pass {p}:\n{Ct}\n")#CLEANUP
 
 		return Ct
 
 
 	def tok2ent(self, context_emb, bin_M):
 		"""
-		#TODO update docstring?
 		Document to Graph Flow from the paper (section 3.4, paragraph 2)
 
 		Obtain the embedding of the entities from the context embeddings.
 		Both mean-pooling and max-pooling are applied.
 
+		:param context_emb: (M, d2) context embedding as obtained from Encoder
+		:param bin_M:   (M, N) a binary matrix as described that maps tokens to entities
+						(produced by EntityGraph)
+
 		:return entity_emb: (N, 2d2) entity embeddings obtained from context embeddings
 		"""
 		M = context_emb.shape[0]
 		N = bin_M.shape[1]
-		#print(f"context_emb: {self.context_emb.shape}")#CLEANUP
-		#print(f"bin_M: {self.bin_M.shape}")  # CLEANUP
-		entity_emb = context_emb.unsqueeze(1).expand(-1, N, -1) # (M, N, d2)
-		#print(f"entity_emb1: {entity_emb.shape}")  # CLEANUP
 
-		bin_M_prime = bin_M.unsqueeze(2) # (M, N, 1)
-		#print(f"bin_M_prime: {bin_M_prime.shape}")  # CLEANUP
-
-		entity_emb = entity_emb * bin_M_prime # (M, N, d2) * (M, N 1) = (M, N, d2)
-		#print(f"entity_emb2: {entity_emb.shape}")  # CLEANUP
-
-		entity_emb = entity_emb.permute(1, 2, 0) # (M, N, d2) -> (N, d2, M)
-		#print(f"entity_emb3: {entity_emb.shape}")  # CLEANUP
+		entity_emb = context_emb.unsqueeze(1).expand(-1, N, -1)  # (M, N, d2)
+		bin_M_prime = bin_M.unsqueeze(2)  # (M, N, 1)
+		entity_emb = entity_emb * bin_M_prime  # (M, N, d2) * (M, N 1) = (M, N, d2)
+		entity_emb = entity_emb.permute(1, 2, 0)  # (M, N, d2) -> (N, d2, M)
 
 		# For the next lines: (N, d2, M) -> (N, d2, 1) -> (N, d2)
 		mean_pooling = F.avg_pool1d(entity_emb, kernel_size=M).squeeze(-1)
 		max_pooling = F.max_pool1d(entity_emb, kernel_size=M).squeeze(-1)
 
-		entity_emb = torch.cat((mean_pooling, max_pooling), dim=-1) # (N, 2d2)
-		#print(f"entity_emb4: {entity_emb.shape}")  # CLEANUP
+		entity_emb = torch.cat((mean_pooling, max_pooling), dim=-1)  # (N, 2d2)
 
 		return entity_emb # (N, 2d2)
 
 	def graph_attention(self, entity_embs, query_emb, graph):
 		"""
-		#TODO update docstring?
 		This implements Dynamic Graph Attention (section 3.4, paragraph 3).
 		Each node of the entity graph propagates information
 		to its neighbors in order to produce updated entity
 		embeddings.
+
+		:param entity_embs: (N, 2d2, 1) entity embeddings as obtained from
+							tok2ent() and unsqueezed in their last dimension
+		:param query_emb: (L, d2) a query embedding as obtained from Encoder
+		:param graph: an entity graph as obtained from EntityGraph
 
 		:return: E_t: (N, d2) updated entity embeddings 
 		"""
@@ -128,13 +125,13 @@ class FusionBlock(nn.Module):
 		# formula 1 # (L, d2) --> (1, L, d2) --> (1, d2, L) --> (1, d2, 1)
 		q_emb = F.avg_pool1d(query_emb.unsqueeze(0).permute(0, 2, 1),
 							 kernel_size=query_emb.shape[0])
-		q_emb = q_emb.permute(0, 2, 1).squeeze(0) # (1, 1, d2) --> (1, d2)
+		q_emb = q_emb.permute(0, 2, 1).squeeze(0)  # (1, 1, d2) --> (1, d2)
 
 		# N * ( (1, d2) x (d2, 2d2) x (2d2, 1) ) --> (N, 1, 1) # formula 2
-		gammas = torch.tensor([ torch.chain_matmul(q_emb, self.V, e)/self.droot for e in entity_embs ]) #TODO avoid for-loop and torch.tensor()
-		mask = torch.sigmoid(gammas)   # (N, 1, 1) # formula 3
+		gammas = torch.tensor([torch.chain_matmul(q_emb, self.V, e)/self.droot for e in entity_embs]) #TODO avoid for-loop and torch.tensor()
+		mask = torch.sigmoid(gammas)  # (N, 1, 1) # formula 3
 		E = torch.stack([m*e for m,e in zip(mask, entity_embs.T)])  # (N, 1, 2d2) # formula 4
-		E = E.squeeze(1).T # (N, 2d2) --> (2d2, N) #TODO do we really need to squeeze?
+		E = E.squeeze(1).T  # (N, 2d2) --> (2d2, N) #TODO do we really need to squeeze?
 
 
 		""" disseminate information across the dynamic sub-graph """
@@ -167,11 +164,8 @@ class FusionBlock(nn.Module):
 
 		""" compute total information received per node """
 		ents_with_new_information = []
-		#print(f"\nin FusionBlock.graph_attention(): THE GRAPH:") #CLEANUP
-		#print(graph) #CLEANUP
 
 		for i in range(N):
-			#print(graph.graph[i]['mention']) #CLEANUP
 			# non-connected nodes have an information flow of 0.
 			# j(scalar * (d2, 1)) --> sum --> (d2, 1) --> loop --> N*(d2, 1)
 			ents_with_new_information.append(sum([alphas[j][i] * hidden[j]
@@ -179,10 +173,6 @@ class FusionBlock(nn.Module):
 												  if graph.graph[i]["links"]
 												  else [torch.zeros((self.d2, 1), device=self.device)]
 												  ))
-			#print(f"new element in ents_with_new_information with type: {type(ents_with_new_information[-1])}") #CLEANUP
-			#if type(ents_with_new_information[-1]) == torch.Tensor: print(f"   shape: {ents_with_new_information[-1].shape}") #CLEANUP
-			#print(f"   new length of ents_with_new_information: {len(ents_with_new_information)}") #CLEANUP
-			#print(f"   device of ent_with_new_information[-1]: {ents_with_new_information[-1].device}") #CLEANUP
 
 		# N*(d2, 1) --> (N, d2, 1) --> relu --> (N, d2, 1)
 		E_t = F.relu(torch.stack(ents_with_new_information)) # formula 8
@@ -191,14 +181,16 @@ class FusionBlock(nn.Module):
 
 	def graph2doc(self, entity_embs, bin_M, context_emb):
 		"""
-		#TODO update docstring
 		This implements Graph to Document Flow (section 3.4, last paragraph).
 
 		Given the updated entity embeddings, using the same binary matrix
 		as in tok2ent, produce the updated context embeddings.
 
-		:param entity_embs: (N, d2) updated entity embeddings as obteined
+		:param entity_embs: (N, d2) updated entity embeddings as obtained
 									from graph_attention
+		:param bin_M:   (M, N) a binary matrix as described that maps tokens to entities
+						(produced by EntityGraph)
+		:param context_emb: (M, d2) a context embedding as obtained from Encoder
 		:return output: (M, d2) updated context embeddings
 		"""
 
@@ -208,12 +200,3 @@ class FusionBlock(nn.Module):
 		output, hidden_states = self.g2d_layer(input) # (1, M, d2) # formula 10
 
 		return output.squeeze(0)
-
-
-
-
-
-
-
-
-

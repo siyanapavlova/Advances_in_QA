@@ -4,7 +4,7 @@ This is supposed to do the whole job!
 """
 
 import os, sys, argparse
-import pickle # mainly for training data
+import pickle  # mainly for training data
 import torch
 import json
 from tqdm import tqdm
@@ -12,35 +12,31 @@ from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer
 
 import hotpot_evaluate_v1 as official_eval_script
-import flair # for NER in the EntityGraph
+import flair  # for NER in the EntityGraph
 from modules import ParagraphSelector, EntityGraph, Encoder, FusionBlock, Predictor
 import utils
 
 
-class DFGN(torch.nn.Module): # TODO extract this to a separate module
-    #TODO? implement loading of a previously trained DFGN model (for final evaluation!) ?
+class DFGN(torch.nn.Module):  # TODO extract this to a separate module
+    # TODO? implement loading of a previously trained DFGN model (for final evaluation!) ?
     def __init__(self, text_length, emb_size, device=torch.device('cpu'),
                  fb_dropout=0.5, predictor_dropout=0.3):
-        #TODO docstring
-        super(DFGN, self).__init__() #TODO pass the device to the Encoder and the Predictor as well?
+        # TODO docstring
+        super(DFGN, self).__init__()  # TODO pass the device to the Encoder and the Predictor as well?
         self.encoder = Encoder.Encoder(text_length=text_length)
-        self.fusionblock = FusionBlock.FusionBlock(emb_size, device=device, dropout=fb_dropout) #TODO sort out init
-        self.predictor = Predictor.Predictor(text_length, emb_size, dropout=predictor_dropout) #TODO sort out init
-
-    def from_file(self, filepath):
-        #TODO load all 3 parts individually and then make a DFGN object? Or des save()/load() handle this well already?
-        pass
+        self.fusionblock = FusionBlock.FusionBlock(emb_size, device=device, dropout=fb_dropout)  # TODO sort out init
+        self.predictor = Predictor.Predictor(text_length, emb_size, dropout=predictor_dropout)  # TODO sort out init
 
     def forward(self, query_ids, context_ids, graph, fb_passes):
         """
-        #TODO docstring
+        Do a forward pass through Encoder, FusionBlock and Predictor.
+
         :param query_ids: Tensor[int] -- token IDs from Encoder.tokenizer
         :param context_ids: Tensor[int] -- token IDs from Encoder.tokenizer
-        :param graph:
-        :param fb_passes:
-        :return:
+        :param graph: an EntityGraph instance
+        :param fb_passes: number of passes through the fusion block
+        :return: outputs as produced by the Predictor's forward function
         """
-        #print(f"in train.dfgn: device of query_ids/context_ids: {str(query_ids.device)}, {ste(context_ids.device)}") #CLEANUP
 
         # forward through encoder
         q_emb = self.encoder(context_ids, query_ids)
@@ -50,33 +46,40 @@ class DFGN(torch.nn.Module): # TODO extract this to a separate module
         Ct = self.fusionblock(c_emb, q_emb, graph, passes=fb_passes)
 
         # forward through predictor: sup, start, end, type
-        outputs = self.predictor(Ct) # (1,M,1), (1,M,1), (1,M,1), (1, 3)
+        outputs = self.predictor(Ct)  # ( (M), (M), (M), (1, 3) )
 
         return outputs
 
-def train(net, train_data, #dev_data,
+def train(net, train_data,
           dev_data_filepath, dev_preds_filepath, model_save_path,
-          para_selector, #TODO sort these nicely
+          para_selector, # TODO sort these nicely
           ps_threshold=0.1,
           ner_device=torch.device('cpu'), training_device=torch.device('cpu'),
           text_length=250,
           fb_passes=1, coefs=(0.5, 0.5),
           epochs=3, batch_size=1, learning_rate=1e-4,
           eval_interval=None, verbose_evaluation=False, timed=False):
-    #TODO docstring
     """
+    TODO docstring
 
     :param net: DFGN object
     :param train_data: training data (raw points), split into batches
-    :param dev_data: data for evaluation during training (raw points), split into batches
-    :param model_save_path:
+    :param dev_data_filepath: data for evaluation during training (raw points), split into batches
+    :param dev_preds_filepath:
+    :param model_save_path: where the trained model should be saved
+    :param para_selector: a ParagraphSelector object
+    :param ps_threshold: threshold for the paragraph selector (relevance score between paragraph and query)
+    :param ner_device: torch device object on which to do the NER tagging
+    :param training_device: torch device object on which to do the training
     :param text_length: limit the context's number of tokens (used in ParagraphSelector and EntityGraph)
     :param fb_passes: number of passes through the fusion block (fb)
     :param coefs: (float,float) coefficients for optimization (formula 15)
-    :param epochs:
-    :param batch_size:
-    :param learning_rate:
-    :param eval_interval:
+    :param epochs: number of epochs (int)
+    :param batch_size: batch size (int)
+    :param learning_rate: learning rate (float), default it 1e-4
+    :param eval_interval: evaluate every eval_interval batches
+    :param verbose_evaluation:
+    :param timed:
     :return: list[(real_batch_size, overall_loss, sup_loss, start_loss, end_loss, type_loss)], list[dict{metrics}], Timer
     """
     timer = utils.Timer()
@@ -90,8 +93,8 @@ def train(net, train_data, #dev_data,
 
     losses = []
     real_batch_sizes = []  # some data points are not usable; this logs the real sizes
-    graph_logging = [0, 0, 0] # [total nodes, total connections, number of graphs]
-    point_usage = [0, 0] # [used points, unused points]
+    graph_logging = [0, 0, 0]  # [total nodes, total connections, number of graphs]
+    point_usage = [0, 0]  # [used points, unused points]
     dev_scores = []
 
     # Set the network into train mode
@@ -101,7 +104,6 @@ def train(net, train_data, #dev_data,
     timer("training_preparation")
 
     print("Training...")
-
 
     best_score = 0
     eval_interval = eval_interval if eval_interval else float('inf') # interval in batches
@@ -127,7 +129,7 @@ def train(net, train_data, #dev_data,
                 # make a list[ list[str, list[str]] ] for each point in the batch
                 context = para_selector.make_context(point,
                                                        threshold=ps_threshold,
-                                                       context_length=text_length) #TODO add device and numerated arguments
+                                                       context_length=text_length)  # TODO add device and numerated arguments
                 graph = EntityGraph.EntityGraph(context,
                                                   context_length=text_length,
                                                   tagger=ner_tagger)
@@ -136,18 +138,18 @@ def train(net, train_data, #dev_data,
                     queries.append(point[2])
                     contexts.append(context)
                     graphs.append(graph)
-                    graph_logging = [a+b # [total nodes, total connections, number of graphs]
+                    graph_logging = [a+b  # [total nodes, total connections, number of graphs]
                                      for a,b in zip(graph_logging, [len(graph.graph),
                                                                     len(graph.relation_triplets()),
                                                                     1])]
                     point_usage[0] += 1
-                else: # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
+                else:  # if the NER in EntityGraph doesn't find entities, the datapoint is useless.
                     useless_datapoint_inds.append(i)
                     point_usage[1] += 1
 
             batch = [point for point in batch if point[0] in ids] # update the batch to exclude useless data points
 
-            real_batch_sizes.append(batch_size - len(useless_datapoint_inds)) #TODO track the batch sizes!
+            real_batch_sizes.append(batch_size - len(useless_datapoint_inds))  #TODO track the batch sizes!
 
             # if our batch is completely useless, just continue with the next batch. :(
             if len(useless_datapoint_inds) == batch_size:
@@ -165,10 +167,10 @@ def train(net, train_data, #dev_data,
                 batch[i][3] = c
 
             # TODO? change utils.make_labeled_data_for_predictor() to process batches of data?
-            labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)] # list[(support, start, end, type)]
+            labels = [utils.make_labeled_data_for_predictor(g,p,tokenizer) for g,p in zip(graphs, batch)]  # list[(support, start, end, type)]
             # list[(Tensor, Tensor, Tensor, Tensor)] -> tuple(Tensor), tuple(Tensor), tuple(Tensor), tuple(Tensor)
             sup_labels, start_labels, end_labels, type_labels = list(zip(*labels))
-            #print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
+            # print(f"in train_dfgn.train(): shapes of labels:\n{len(sup_labels)}, {len(start_labels)}, {len(end_labels)}, {len(type_labels)}") #CLEANUP
 
             q_ids_list = [t.to(training_device) if t is not None else None for t in q_ids_list]
             c_ids_list = [t.to(training_device) if t is not None else None for t in c_ids_list]
@@ -180,24 +182,22 @@ def train(net, train_data, #dev_data,
             end_labels = torch.stack(end_labels).to(training_device)      # (batch, 1)
             type_labels = torch.stack(type_labels).to(training_device)    # (batch)
 
-
             """ FORWARD PASSES """
             optimizer.zero_grad()
 
-
             sups, starts, ends, types = [], [], [], []
-            for query, context, graph in zip(q_ids_list, c_ids_list, graphs): # 'graph' is not a tensor -> for-loop instead of batch processing
+            for query, context, graph in zip(q_ids_list, c_ids_list, graphs):  # 'graph' is not a tensor -> for-loop instead of batch processing
 
-                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes) # (M, 2), (M), (M), (1, 3)
+                o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)  # (M, 2), (M), (M), (1, 3)
                 sups.append(o_sup)
                 starts.append(o_start)
                 ends.append(o_end)
                 types.append(o_type)
 
-            sups =   torch.stack(sups)   # (batch, M, 2)
-            starts = torch.stack(starts) # (batch, 1, M)
-            ends =   torch.stack(ends)   # (batch, 1, M)
-            types =  torch.stack(types)  # (batch, 1, 3)
+            sups =   torch.stack(sups)    # (batch, M, 2)
+            starts = torch.stack(starts)  # (batch, 1, M)
+            ends =   torch.stack(ends)    # (batch, 1, M)
+            types =  torch.stack(types)   # (batch, 1, 3)
 
             """ LOSSES & BACKPROP """
             weights = torch.ones(2, device=training_device) #TODO maybe extract this to a tiny function?
@@ -215,7 +215,7 @@ def train(net, train_data, #dev_data,
             type_loss  =  criterion(types.view(-1,3),  type_labels.view(-1))    # (batch, 1, 3), (batch, 1)
 
             # This doesn't have the weak supervision BFS mask stuff from section 3.5 of the paper
-            #TODO? maybe start training with start/end loss only first, then train another model on all 4 losses?
+            # TODO? maybe start training with start/end loss only first, then train another model on all 4 losses?
             loss = start_loss + end_loss + coefs[0]*sup_loss + coefs[1]*type_loss # formula 15
 
             loss.backward(retain_graph=True)
@@ -223,7 +223,7 @@ def train(net, train_data, #dev_data,
                             sup_loss.item(),
                             start_loss.item(),
                             end_loss.item(),
-                            type_loss.item()) ) # for logging purposes
+                            type_loss.item()))  # for logging purposes
 
             batch_counter += 1
             # Evaluate on validation set after some iterations
@@ -247,8 +247,6 @@ def train(net, train_data, #dev_data,
                 else:
                     print(f"No improvement yet...")
                 timer(f"training_evaluation_{batch_counter/eval_interval}")
-
-
 
             optimizer.step()
         timer(f"training_epoch_{epoch}")
@@ -278,27 +276,27 @@ def train(net, train_data, #dev_data,
         return losses_with_batchsizes, dev_scores, graph_logging, point_usage
 
 
-
-
 def predict(net, query, context, graph, tokenizer, sentence_lengths, fb_passes=1):
     """
-    # TODO docstring
-    #TODO make this a method of DFGN
-    :param net:
-    :param query:
-    :param context:
-    :param graph:
-    :param tokenizer:
+    Predict answer and supporting facts given a trained DFGN network,
+    and the query, context and graph of a point.
+
+    # TODO make this a method of DFGN
+    :param net: a trained DFGN network
+    :param query: a tokenized query, Tensor[int] -- token IDs from Encoder.tokenizer
+    :param context: a tokenized context, Tensor[int] -- token IDs from Encoder.tokenizer
+    :param graph: an EntityGraph object
+    :param tokenizer: tokenizer used for decoding
     :param sentence_lengths:
-    :param fb_passes:
-    :return:
+    :param fb_passes: number of passes through the fusion block
+    :return: answer - str, sup_fact_pairs [[str, int]]
     """
 
     # (M,2), (1,M), (1,M), (1,3)
     o_sup, o_start, o_end, o_type = net(query, context, graph, fb_passes=fb_passes)
 
     # =========== GET ANSWERS
-    answer_start = o_start.argmax() #TODO make sure that these tensors are all only containing one number!
+    answer_start = o_start.argmax()  #TODO make sure that these tensors are all only containing one number!
     answer_end = o_end.argmax()
     answer_type = o_type.argmax()
     if answer_type == 0:
@@ -333,10 +331,18 @@ def evaluate(net,
              device, eval_data_filepath, eval_preds_filepath,
              fb_passes = 1, text_length = 250, verbose=False):
     """
-    #TODO docstring
-    :param net:
-    :param dev_data:
-    :return:
+    # TODO docstring
+
+    :param net: a trained DFGN network
+    :param tokenizer:
+    :param ner_tagger:
+    :param device: torch device object on which to do the evaluation
+    :param eval_data_filepath:
+    :param eval_preds_filepath:
+    :param fb_passes: number of passes through the fusion block
+    :param text_length: max text length for the context
+    :param verbose:
+    :return: metrics as returned by the HotPotQA official evaluation script (hotpot_evaluate_v1)
     """
 
     """ PREPADE DATA FOR PREDICTION """
@@ -358,7 +364,6 @@ def evaluate(net,
     contexts = [c for i, c in enumerate(contexts) if i not in useless_datapoint_inds]
     graphs = [g for i, g in enumerate(graphs) if i not in useless_datapoint_inds]
 
-
     # required for prediction in the right format
     s_lens_batch = [utils.sentence_lengths(c, tokenizer) for c in contexts]
 
@@ -370,7 +375,6 @@ def evaluate(net,
 
     for i,g in enumerate(graphs):
         graphs[i].M = g.M.to(device)  # work with enumerate to actually mutate the graph objects
-
 
     """ FORWARD PASSES """
     answers = {}  # {question_id: str} (either "yes", "no" or a string containing the answer)
@@ -546,10 +550,6 @@ if __name__ == '__main__':
     take_time("training")
 
 
-
-
-
-
     # ========== LOGGING
     print(f"Saving losses in {losses_abs_path}...")
     with open(losses_abs_path, "w") as f:
@@ -584,29 +584,3 @@ if __name__ == '__main__':
 
     print("\nTimes taken:\n", take_time)
     print("done.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
