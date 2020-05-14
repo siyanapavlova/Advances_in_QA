@@ -16,7 +16,7 @@ from utils import Timer
 from utils import HotPotDataHandler
 from utils import ConfigReader
 from modules import ParagraphSelector, EntityGraph
-from train_dfgn import predict
+from train_dfgn import predict, DFGN
 
 
 
@@ -194,8 +194,8 @@ parser.add_argument('dfgn_model_name', metavar='model', type=str,
 args = parser.parse_args()
 cfg = ConfigReader(args.config_file)
 
-model_abs_path = cfg('model_abs_dir') + args.dfgn_model_name + "/" # there is a .bin in this directory; that's the model
-results_abs_path = model_abs_path + args.dfgn_model_name + ".test_scores"
+model_abs_dir = cfg('model_abs_dir') + args.dfgn_model_name + "/" # there is a .bin in this directory; that's the model
+results_abs_path = model_abs_dir + args.dfgn_model_name + ".test_scores"
 predictions_abs_path = cfg('predictions_abs_dir') + args.dfgn_model_name + ".predicitons"
 
 # check all relevant file paths and directories before starting training
@@ -207,9 +207,9 @@ except FileNotFoundError as e:
     sys.exit()
 
 
-if not os.path.exists(model_abs_path):
-    print(f"newly creating {model_abs_path}")
-    os.makedirs(model_abs_path)
+if not os.path.exists(model_abs_dir):
+    print(f"newly creating {model_abs_dir}")
+    os.makedirs(model_abs_dir)
 
 if not os.path.exists(cfg('predictions_abs_dir')):
     print(f"newly creating {cfg('predictions_abs_dir')}")
@@ -247,7 +247,7 @@ para_selector = ParagraphSelector.ParagraphSelector(cfg("ps_model_abs_dir")) # l
 para_selector.net.eval() # ParagraphSelector itself does not inherit from nn.Module.
 para_selector = para_selector.net.to(device)
 
-dfgn = torch.load(model_abs_path)
+dfgn = torch.load(model_abs_dir+args.dfgn_model_name)
 dfgn.eval()
 dfgn = dfgn.to(device)
 take_time("model loading")
@@ -258,7 +258,7 @@ counter = 0 # counts up with each question ( = each data point)
 graph_stats = []
 point_usage_stats = []
 
-batch_size = data_limit if not cfg(["prediction_batch_size"]) else cfg(["prediction_batch_size"])
+batch_size = data_limit if not cfg("prediction_batch_size") else cfg("prediction_batch_size")
 for pos in range(0, data_limit, batch_size):
 
     answers = [] # predicted answers
