@@ -356,12 +356,13 @@ class HotPotDataHandler():
 
     def make_eval_data(self, para_selector, dev_data, destination, cfg):
         """
-        TODO docstring
-        :param para_selector:
-        :param dev_data:
-        :param destination:
-        :param cfg:
-        :return:
+        Make evaluation data necessary to run the official HotpotQA evaluation
+        script and dump it to a file.
+
+        :param para_selector: a Paragraph Selector object
+        :param dev_data: a list of raw_points
+        :param destination: the file where eval data should be dumped
+        :param cfg: a ConfigReader object (necessary to get ps_threshold and text_length for Paragraph Selector)
         """
         id_to_list_index = {point['_id']: i for i, point in enumerate(self.data)}
 
@@ -414,14 +415,12 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
     :return start_labels: Tensor of shape M -- marks tokens which are start of spans
     :return end_labels: Tensor of shape M -- marks tokens which are end of spans
     :return type_labels: Tensor of shape 1 -- one of 3 question types (yes/no/span)
-    :return sup_labels_by_sentence: #TODO describe
-    :return sentence_lengths: #TODO describe
     """
     M = len(graph.tokens)
-    #print(f"making labels for point {raw_point[0]}") #CLEANUP
-    #print(f"query of that point: {raw_point[2]}") #CLEANUP
-    #print(f"length of graph's tokens (=M): {M}") #CLEANUP
-    #print(f"raw_point context:\n{raw_point[3]}\n\n") #CLEANUP
+    # print(f"making labels for point {raw_point[0]}") #CLEANUP
+    # print(f"query of that point: {raw_point[2]}") #CLEANUP
+    # print(f"length of graph's tokens (=M): {M}") #CLEANUP
+    # print(f"raw_point context:\n{raw_point[3]}\n\n") #CLEANUP
 
     sup_labels = torch.zeros(M, dtype=torch.long) # CrossEntropyLoss needs dtype=torch.long
     start_label = torch.zeros(1, dtype=torch.long)
@@ -470,7 +469,8 @@ def make_labeled_data_for_predictor(graph, raw_point, tokenizer):
 
 def sentence_lengths(context, tokenizer):
     """
-    TODO docstring
+    Return the length of each sentence in each paragraph of the context
+
     :param context: a context as provided by EntityGraph, for example
     :param tokenizer: usually a BERT Tokenizer
     :return: list[list[int]] -- number of tokens per sentence, per paragraph
@@ -479,36 +479,6 @@ def sentence_lengths(context, tokenizer):
     tokenized_sentences = [[tokenizer.tokenize(s) for s in p] for p in list_context]  # list[list[list[str]]]
     sentence_lengths = [[len(s) for s in p] for p in tokenized_sentences]  # list[list[int]]
     return sentence_lengths
-
-def make_eval_data_DEPRECATED(raw_points): #CLEANUP?
-    """
-    TODO: docstring
-    format the data point to the form of the official evaluation script
-    :param raw_points:
-    :return:
-    """
-
-    eval_data = {"answer": {},
-                 "sp": {}}
-    for point in raw_points:
-        eval_data["answer"][point[0]] = point[4] # map question IDs to answers
-        # map question IDs to supporting facts
-        eval_data["sp"][point[0]] = []
-
-        # lowercase paragraph titles both in the context and in the supporting facts
-        paras = [[p[0].lower(),p[1]] for p in point[3]]
-        sup_facts = {title.lower():s_num for title,s_num in point[1].items()}
-        #for para in point[3]: # point #CLEANUP?
-        for para in paras:
-            # if the paragraph has supporting facts;
-            #if point[1].get(para[0]): # point[1] is {str:list[int]}; para[0] is the paragraph title #CLEANUP?
-            if sup_facts.get(para[0]): # para[0] is the paragraph title
-                for sent_idx in sup_facts[para[0]]: # for each sentence that's a supporting fact
-                    # if the sentence with index sent_idx is in the paragraph (has not been cropped out by PS)
-                    if sent_idx < len(para[1]):
-                        eval_data["sp"][point[0]].append([para[0], sent_idx])
-
-    return eval_data
 
 
 class Linear(nn.Module):
