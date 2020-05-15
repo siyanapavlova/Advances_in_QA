@@ -64,7 +64,10 @@ The predictions made during evaluation are also logged in a directory named afte
 
 
 ### Test the DFGN with `eval_dfgn.py` 
-[TODO write this section] 
+Similarly to the evaluation script for the Paragraph Selector, pass a configuration file and the name of the directory containing the model. 
+```
+python3 eval_dfgn.py config/eval_dfgn.cfg my_DFGN_model
+```
 
 
 ### Pre-trained models [TODO make sure that this is up-to-date]

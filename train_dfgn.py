@@ -60,12 +60,12 @@ def train(net, train_data,
           epochs=3, batch_size=1, learning_rate=1e-4,
           eval_interval=None, verbose_evaluation=False, timed=False):
     """
-    TODO docstring
+    This is the main function used for training a DFGN network.
 
     :param net: DFGN object
     :param train_data: training data (raw points), split into batches
     :param dev_data_filepath: data for evaluation during training (raw points), split into batches
-    :param dev_preds_filepath:
+    :param dev_preds_filepath: data for the predictions
     :param model_save_path: where the trained model should be saved
     :param para_selector: a ParagraphSelector object
     :param ps_threshold: threshold for the paragraph selector (relevance score between paragraph and query)
@@ -78,8 +78,8 @@ def train(net, train_data,
     :param batch_size: batch size (int)
     :param learning_rate: learning rate (float), default it 1e-4
     :param eval_interval: evaluate every eval_interval batches
-    :param verbose_evaluation:
-    :param timed:
+    :param verbose_evaluation: if True, when predicting, question and predicted answer will be printed
+    :param timed: if True, log times
     :return: list[(real_batch_size, overall_loss, sup_loss, start_loss, end_loss, type_loss)], list[dict{metrics}], Timer
     """
     timer = utils.Timer()
@@ -331,17 +331,17 @@ def evaluate(net,
              device, eval_data_filepath, eval_preds_filepath,
              fb_passes = 1, text_length = 250, verbose=False):
     """
-    # TODO docstring
+    This function is used to evaluating a DFGN network
 
     :param net: a trained DFGN network
-    :param tokenizer:
-    :param ner_tagger:
+    :param tokenizer: tokenizer use for encoding
+    :param ner_tagger: Named Entity Recognition tagger
     :param device: torch device object on which to do the evaluation
-    :param eval_data_filepath:
-    :param eval_preds_filepath:
+    :param eval_data_filepath: filepath where gold data will be dumped
+    :param eval_preds_filepath: filepath where predictions will be dumped
     :param fb_passes: number of passes through the fusion block
     :param text_length: max text length for the context
-    :param verbose:
+    :param verbose: if True, when predicting, question and predicted answer will be printed
     :return: metrics as returned by the HotPotQA official evaluation script (hotpot_evaluate_v1)
     """
 
