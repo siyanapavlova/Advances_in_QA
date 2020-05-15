@@ -84,13 +84,13 @@ def prepare_prediction(raw_data_points,
 
 def encode_to_device(queries, contexts, graphs, encoder, device, timer):
     """
-    #TODO docstring
-    :param queries:
-    :param contexts:
-    :param graphs:
-    :param encoder:
-    :param device:
-    :param timer: a timer object (see utils)
+    Encode tokens to BERT token IDs and put all data in tensor form to the device.
+    :param queries: list[list[str]] -- multiple queries, tokenized.
+    :param contexts: list[ list[str,list[str]] ] -- list of contexts (= list of paragraph-sentencelist pairs)
+    :param graphs: list[EntityGraph]
+    :param encoder: Encoder object
+    :param device: torch.device object ('cuda' or 'cpu')
+    :param timer: utils.Timer object
     :return: lists of query/context token id tensors, graphs, timer (all tensor parts moved to the device)
     """
 
