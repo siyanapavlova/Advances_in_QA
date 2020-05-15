@@ -1,8 +1,9 @@
 # Advances in QA: Re-implementing 'Dynamically Fused Graph Networks'
 
-Here are exercises and the final project from the "Advances in QA" class, winter semester 2019/2020, Uni Saarland. 
+This is the group project from the "Advances in QA" class, winter semester 2019/2020, Uni Saarland.
+"We" are Yu-Wen Chen, Siyana Pavlova, and Simon Preissner. Our project report is contained in the repository as well.
 
-The final project aims to re-implement the system published by [Xiao et al. (2019)](https://arxiv.org/pdf/1905.06933.pdf "pdf on arxiv.org"), *"Dynamically Fused Graph Network for Multi-hop Reasoning"*, with as little assistance from their [openly available code](https://github.com/woshiyyya/DFGN-pytorch "Github repository") as possible.
+The project aims to re-implement the system published by [Xiao et al. (2019)](https://arxiv.org/pdf/1905.06933.pdf "pdf on arxiv.org"), *"Dynamically Fused Graph Network for Multi-hop Reasoning"*, with as little assistance from their [openly available code](https://github.com/woshiyyya/DFGN-pytorch "Github repository") as possible.
 
 ### DFGN in Short
 Multi-hop question answering (QA) requires a system to derive the answer to a question from multiple text resources which, each on their own, don't contain the full answer.
