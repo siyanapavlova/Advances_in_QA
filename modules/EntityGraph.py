@@ -126,10 +126,7 @@ class EntityGraph():
         When working with flair, a heuristic is used to counteract cases
         in which an entity contains trailing punctuation (this would conflict
         with BertTokenizer later on).
-        #TODO update docstring
-        :param tag_with: one of 'stanford' or 'flair'
-        :type tag_with: str
-        #TODO clean up the stanford tagger? Make the 'tag_with' stuff (str vs. obj) clearer!
+        :param tag_with: either 'stanford' or an instance of flair.models.SequenceTagger
         """
         ent_id = 0
 
