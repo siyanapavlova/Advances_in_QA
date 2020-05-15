@@ -1,11 +1,11 @@
-# Advances_in_QA: Re-implementing 'Dynamically Fused Graph Networks'
+# Advances in QA: Re-implementing 'Dynamically Fused Graph Networks'
 
 Here are exercises and the final project from the "Advances in QA" class, winter semester 2019/2020, Uni Saarland. 
 
-The final project aims to re-implement the system published by [Xiao et al. (2019)](https://arxiv.org/pdf/1905.06933.pdf "pdf on arxiv.org"), *"Dynamically Fused Graph Network for Multi-hop Reasoning"* with as little assistance from their [openly available code](https://github.com/woshiyyya/DFGN-pytorch "Github repository") as possible.
+The final project aims to re-implement the system published by [Xiao et al. (2019)](https://arxiv.org/pdf/1905.06933.pdf "pdf on arxiv.org"), *"Dynamically Fused Graph Network for Multi-hop Reasoning"*, with as little assistance from their [openly available code](https://github.com/woshiyyya/DFGN-pytorch "Github repository") as possible.
 
 ### DFGN in Short
-Multi-hop question answering (QA) requires a system to derive the answer to a question from multiple text resources which, each on its own, don't contain the full answer.
+Multi-hop question answering (QA) requires a system to derive the answer to a question from multiple text resources which, each on their own, don't contain the full answer.
 
 In short, the workflow of dynamically fused graph networks (DFGN) is as follows: select several relevant paragraphs, construct an entity graph from them, and then look at parts of this graph to compute which entities contribute the most to answering the question at hand. Perform this step multiple times (each time looking at different parts of the entity graph) and take into account the entities' contribution from the previous iteration. This way, the graph network converges to the final answer.
 
@@ -16,7 +16,9 @@ The paper describes an architecture which is split into 5 modules:
 4) **fusion block** – the heart of DFGN – looks at parts of the entity graph for multiple iterations and exchanges information between the graph's nodes
 5) **predictior** takes the fusion block's output and passes it through a stacked LSTM architecture to output the final answers
 
-The intuition is that with multiple iterations, relevant entities propagate their importance to other, directly connected entities. The entity graph has no document boundaries, enabling free flow of information ( = reasoning) across paragraphs. By focusing on sub-parts of the entity graph, **[TODO] why only look at subgraphs?** 
+The intuition is that with multiple iterations, relevant entities propagate their importance to other, directly connected entities. The entity graph has no document boundaries, enabling free flow of information ( = reasoning) across paragraphs. 
+
+**Naming conventions**: the system is trained in two parts: the paragraph selector (module 1) and what we call _DFGN_ (modules 3-5). Therefore, we call the final result _full network_ (modules 1-5). 
 
 
 ### External and Internal Modules
@@ -36,25 +38,23 @@ You can install each of these modules individually or use the `requirements.txt`
 pip install -r requirements.txt
 ```
 
-### Train the Paragraph Selector with `train_ps.py`
-Pass a configuration file and a model name for execution. The model name will be used to **create a directory with all outputs** (model config, model parameters, losses, times, scores during training). Example:
+### Train the Paragraph Selector
+Execute `train_ps.py` and pass a configuration file and a model name for execution. The model name will be used to **create a directory with all outputs** (model config, model parameters, losses, times, scores during training). Example:
 ```
-python3 train_ps.py config/train_ps_final.cfg my_model
+python3 train_ps.py config/train_ps_final.cfg my_ps_model
 ```
 
 
-
-### Train the DFGN with `train_dfgn.py`
-Training a DFGN means that the Encoder, FusionBlock, and Predictor modules are trained jointly, using a ParagraphSelector model and the EntityGraph module to process a question before it is encoded. This script runs similarly to `train_ps.py`:
+### Train the DFGN
+Training a DFGN with `train_dfgn.py` means that the Encoder, FusionBlock, and Predictor modules are trained jointly, using a _previusly trained_ ParagraphSelector model and the EntityGraph module to process a question before it is encoded. This script runs similarly to `train_ps.py`:
 ```
-python3 train_dfgn.py config/train_dfgn.cfg my_dfgn
+python3 train_dfgn.py config/train_dfgn.cfg my_dfgn_model
 ```
-[TODO update this section?]
-Have a look at the config file used in this example in oder to get an idea of the required (and optional) parameters for training. If you run into issues with your GPU, try setting device-related parameters to "False" or to 'cpu'. The batch size might have to be very small. 
+Have a look at the config file used in this example in order to get an idea of the required (and optional) parameters for training. If you run into issues with your GPU, try setting device-related parameters to "False" or decrease the batch size. For training DFGN, it might have to be below 4. 
 
 
 
-### Test the Paragraph Selector with `eval_ps.py`
+### Test the Paragraph Selector
 This is just as straightforward as training: upon execution, pass a configuration file and name of the model that you want to test to `eval_ps.py` and the script will compute precision, recall, F1 score, and accuracy and log them:
 ```
 python3 eval_py.py config/eval_ps.cfg my_ParagraphSelector_model
@@ -62,17 +62,16 @@ python3 eval_py.py config/eval_ps.cfg my_ParagraphSelector_model
 The predictions made during evaluation are also logged in a directory named after the model. 
 
 
-
 ### Test the DFGN with `eval_dfgn.py` 
 [TODO write this section] 
 
 
-### Pre-trained models [TODO make sure that this is up-to-date]
+### Pre-trained Models
 You can download pre-trained models for the ParagraphSelector and the subsequent DFGN [from this Google Drive](https://drive.google.com/drive/folders/1FZzxpKQGhDzaDjACcPTna117Ope-RKdE?usp=sharing).
 
 
 ### Configuration Files
-The class `ConfigReader` in the utils module can parse files in raw text format to a number of data types. The general syntax of configuration files (preferably indicated by the extension '.cfg') follows Python syntax. Here are important details:
+The class `ConfigReader` in the utils module can parse files in raw text format to a number of data types. The syntax of configuration files (preferably indicated by the extension '.cfg') follows Python syntax in most parts. Here are important details:
  
 - one parameter per line, containing a name and a value
     - name and value are separated by at least one white space or tab
@@ -90,6 +89,7 @@ The class `ConfigReader` in the utils module can parse files in raw text format 
 Suppose there is a file called 'my_config.cfg' which contains a line `batch_size   42`. ConfigReader can be used to access the value 42 like this:
 ```python
 from utils import ConfigReader
+
 file_path = 'my_config.cfg'
 cfg = ConfigReader(file_path)
 my_batch_size = cfg("batch_size")
